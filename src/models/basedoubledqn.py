@@ -10,7 +10,7 @@ from models.replay_buffer import ReplayMemory
 class BaseDoubleDQN(nn.Module):
 
     #def __init__(self, h, w, c, n_actions, frames, lr, num_token, device, use_memory, use_text):
-    def __init__(self, obs_space, action_space, lr, device, use_memory):
+    def __init__(self, obs_space, action_space, lr, device, use_memory, writer=None):
         """
         h: height of the screen
         w: width of the screen
@@ -29,7 +29,7 @@ class BaseDoubleDQN(nn.Module):
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
-        self.optimizer = torch.optim.RMSprop(self.parameters(), lr=lr)
+        self.optimizer = torch.optim.RMSprop(self.policy_net.parameters(), lr=lr)
 
         self.batch_size = 64
         buffer_size = 10000
@@ -48,6 +48,7 @@ class BaseDoubleDQN(nn.Module):
         self.n_update_target = 0
 
         self.device = device
+        self.to(device)
 
     def select_action(self, state):
 
@@ -143,14 +144,33 @@ class BaseDoubleDQN(nn.Module):
         # Optimization
         self.optimizer.zero_grad()
         loss.backward()
+
         # Keep the gradient between (-1,1). Works like one uses L1 loss for large gradients (see Huber loss)
         for param in self.policy_net.parameters():
             param.grad.data.clamp_(-1, 1)
+
+        # self.old_parameters = dict()
+        # for k, v in self.policy_net.state_dict().items():
+        #     self.old_parameters[k] = v.cpu()
+
         # Do the gradient descent step
         self.optimizer.step()
+
+        # self.new_parameters = dict()
+        # for k,v in self.policy_net.state_dict().items():
+        #     self.new_parameters[k] = v.cpu()
+        #
+        # self.check_weigths_change()
 
         if environment_step % self.update_target_every == 0:
             self.target_net.load_state_dict(self.policy_net.state_dict())
             self.n_update_target += 1
 
         return loss.detach().item()
+
+    def check_weigths_change(self):
+        for param_name in self.old_parameters:
+            assert not torch.equal(self.new_parameters[param_name], self.old_parameters[param_name]),\
+                "param {} didn't change".format(param_name)
+
+

@@ -22,12 +22,10 @@ device = 'cuda'
 env = TorchWrapper(env, device=device)
 model = BaseDoubleDQN(obs_space=env.observation_space,
                       action_space=env.action_space,
-                      lr=3e-4,
+                      lr=1e-5,
                       device=device,
                       use_memory=True
                       )
-model.to(device)
-
 # %%
 
 n_episodes = 10000
@@ -65,6 +63,8 @@ for episode_num in range(n_episodes):
                                     done=done,
                                     mission=new_obs["mission"],
                                     environment_step=total_step)
+
+        obs = new_obs
 
         tf_logger.log("loss", loss)
 
