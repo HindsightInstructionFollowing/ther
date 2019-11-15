@@ -38,6 +38,7 @@ class ReplayMemory(object):
         return self.len
 
     def store_transition(self, curr_state, action, reward, next_state, terminal, mission):
+        raise NotImplementedError("This is suspicious")
         self.stored_transitions.append(self.transition(curr_state, action, reward, next_state, terminal, mission))
 
     def add_hindsight_transitions(self, reward, mission, keep_last_transitions):

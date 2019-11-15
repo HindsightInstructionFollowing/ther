@@ -1,5 +1,32 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
+
+def init_weights(m):
+    if type(m) == nn.Linear:
+        torch.nn.init.xavier_uniform_(m.weight)
+        m.bias.data.fill_(0.01)
+    elif type(m) == nn.Conv2d:
+        torch.nn.init.kaiming_normal_(m.weight, mode="fan_in", nonlinearity='relu')
+
+
+class MlpNet(nn.Module):
+    def __init__(self, obs_space, action_space):
+        super().__init__()
+        n_hidden = 20
+
+        self.fc1 = nn.Linear(obs_space.spaces["image"].shape[0], out_features=n_hidden)
+        self.fc2 = nn.Linear(n_hidden, out_features=n_hidden)
+        self.fc3 = nn.Linear(n_hidden, action_space.n)
+        self.apply(init_weights)
+
+    def forward(self, state):
+        state = state["image"]
+        out = F.relu(self.fc1(state))
+        out = F.relu(self.fc2(out))
+        return self.fc3(out)
+
+
 
 class MinigridConv(nn.Module):
     def __init__(self, obs_space, action_space, use_lstm_after_conv):
@@ -50,6 +77,9 @@ class MinigridConv(nn.Module):
 
         self.fc_out = nn.Linear(in_features=self.fc_text_embedding_size + self.size_after_conv, out_features=self.n_actions)
 
+        # Initialize network
+        self.apply(init_weights)
+
     def forward(self, state):
 
         if self.lstm_after_conv:
@@ -71,6 +101,8 @@ class MinigridConv(nn.Module):
         # Forward pass through GRU
         outputs, hidden = self.text_rnn(packed)
         out_language = self.fc_language(hidden[0])
+
+        out_language = F.relu(out_language)
 
         concat = torch.cat((flatten, out_language), dim=1)
         return self.fc_out(concat)

@@ -9,8 +9,8 @@ EXPE_DEFAULT_CONFIG = {
     "env_ext": '',
     "model_ext": '',
     "seed": 42,
-    "exp_dir": "default_out",
-    "local_test": False}
+    "exp_dir": "default_out"
+}
 
 
 def override_config_recurs(config, config_extension):

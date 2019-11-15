@@ -4,13 +4,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.neural_architecture import MinigridConv
+from models.neural_architecture import MinigridConv, MlpNet
 from models.replay_buffer import ReplayMemory
 
 class BaseDoubleDQN(nn.Module):
 
     #def __init__(self, h, w, c, n_actions, frames, lr, num_token, device, use_memory, use_text):
-    def __init__(self, obs_space, action_space, lr, device, use_memory, writer=None):
+    def __init__(self, obs_space, action_space, config, writer=None):
         """
         h: height of the screen
         w: width of the screen
@@ -23,32 +23,35 @@ class BaseDoubleDQN(nn.Module):
         """
         super(BaseDoubleDQN, self).__init__()
 
+        if config["dqn_architecture"] == "conv":
+            nn_creator = lambda : MinigridConv(obs_space=obs_space, action_space=action_space, use_lstm_after_conv=True)
+        else:
+            nn_creator = lambda : MlpNet(obs_space=obs_space, action_space=action_space)
 
-        self.policy_net = MinigridConv(obs_space=obs_space, action_space=action_space, use_lstm_after_conv=True)
-        self.target_net = MinigridConv(obs_space=obs_space, action_space=action_space, use_lstm_after_conv=True)
+        self.policy_net = nn_creator()
+        self.target_net = nn_creator()
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
-        self.optimizer = torch.optim.RMSprop(self.policy_net.parameters(), lr=lr)
+        self.optimizer = torch.optim.RMSprop(self.policy_net.parameters(), lr=config["lr"])
 
-        self.batch_size = 64
-        buffer_size = 10000
-        self.gamma = 0.99
+        self.batch_size = config["batch_size"]
+        self.gamma = config["gamma"]
         self.n_actions = action_space.n
 
-        self.replay_buffer = ReplayMemory(size=buffer_size)
+        self.replay_buffer = ReplayMemory(size=config["replay_buffer_size"])
 
         self.epsilon_init = 1
         self.epsilon_min = 0.04
-        self.step_exploration = 10000
+        self.step_exploration = config["step_exploration"]
         self.current_epsilon = self.epsilon_init
         self.total_steps = 0
 
-        self.update_target_every = 1000
+        self.update_target_every = config["update_target_every"]
         self.n_update_target = 0
 
-        self.device = device
-        self.to(device)
+        self.device = config["device"]
+        self.to(self.device)
 
     def select_action(self, state):
 
@@ -78,8 +81,8 @@ class BaseDoubleDQN(nn.Module):
                                           action=action,
                                           reward=reward,
                                           next_state=next_state,
-                                          terminal=done,
-                                          mission=mission)
+                                          mission=mission,
+                                          terminal=done)
 
     # Optimize the model
     def optimize_model(self, state, action, next_state, reward, done, mission, environment_step):
@@ -88,9 +91,8 @@ class BaseDoubleDQN(nn.Module):
                                action=action,
                                next_state=next_state,
                                reward=reward,
-                               done=done,
-                               mission=mission
-                               )
+                               mission=mission,
+                               done=done)
 
         if len(self.replay_buffer) < self.batch_size:
             return 0
@@ -129,7 +131,7 @@ class BaseDoubleDQN(nn.Module):
                                        + self.gamma \
                                        * self.target_net(batch_next_state_non_terminal_dict).gather(1, args_actions).detach()
 
-        targets = targets.reshape(-1, 1)
+        targets = targets.reshape(-1)
 
         # Compute the current estimate of Q
         batch_curr_state_dict = {
@@ -137,7 +139,7 @@ class BaseDoubleDQN(nn.Module):
             "mission": batch_mission,
             "text_length": batch_text_length
         }
-        predictions = self.policy_net(batch_curr_state_dict).gather(1, batch_action)
+        predictions = self.policy_net(batch_curr_state_dict).gather(1, batch_action).view(-1)
 
         # Loss
         loss = F.smooth_l1_loss(predictions, targets)
@@ -146,7 +148,7 @@ class BaseDoubleDQN(nn.Module):
         loss.backward()
 
         # Keep the gradient between (-1,1). Works like one uses L1 loss for large gradients (see Huber loss)
-        for param in self.policy_net.parameters():
+        for name, param in self.policy_net.named_parameters():
             param.grad.data.clamp_(-1, 1)
 
         # self.old_parameters = dict()
