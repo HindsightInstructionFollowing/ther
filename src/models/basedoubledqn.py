@@ -12,14 +12,6 @@ class BaseDoubleDQN(nn.Module):
     #def __init__(self, h, w, c, n_actions, frames, lr, num_token, device, use_memory, use_text):
     def __init__(self, obs_space, action_space, config, writer=None):
         """
-        h: height of the screen
-        w: width of the screen
-        frames: last observations to make a state
-        n_actions: number of actions
-        lr: learning rate
-        num_token: number of words, useful only for the onehot modelisation
-        device: device to use
-        use_memory: boolean, 1: the frames are processed with a LSTM, 0: the frames are stacked to make a state
         """
         super(BaseDoubleDQN, self).__init__()
 
@@ -33,7 +25,7 @@ class BaseDoubleDQN(nn.Module):
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
-        self.optimizer = torch.optim.RMSprop(self.policy_net.parameters(), lr=config["lr"])
+        self.optimizer = torch.optim.RMSprop(self.policy_net.parameters(), lr=config["lr"], weight_decay=1e-3)
 
         self.batch_size = config["batch_size"]
         self.gamma = config["gamma"]
@@ -63,11 +55,8 @@ class BaseDoubleDQN(nn.Module):
             q_values = [ 1 / self.n_actions for i in range(self.n_actions)]
         else:
             # max(1) for the dim, [1] for the indice, [0] for the value
-            copy_state = state.copy()
-            copy_state["text_length"] = [state["mission"].shape[0]]
-            copy_state["mission"] = state["mission"].unsqueeze(0)
+            q_values = self.policy_net(state).detach().cpu().numpy()[0]
 
-            q_values = self.policy_net(copy_state).detach().cpu().numpy()[0]
             action = int(q_values.argmax())
 
         self.total_steps += 1
@@ -126,7 +115,7 @@ class BaseDoubleDQN(nn.Module):
         # Double DQN
         if torch.sum(batch_terminal) != self.batch_size:
             # Selection of the action with the policy net
-            args_actions = self.policy_net(batch_next_state_non_terminal_dict).max(1)[1].reshape(-1, 1)
+            args_actions = self.target_net(batch_next_state_non_terminal_dict).max(1)[1].reshape(-1, 1)
             targets[batch_terminal == 0] = targets[batch_terminal == 0] \
                                        + self.gamma \
                                        * self.target_net(batch_next_state_non_terminal_dict).gather(1, args_actions).detach()

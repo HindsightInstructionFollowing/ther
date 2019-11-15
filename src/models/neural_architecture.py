@@ -18,6 +18,7 @@ class MlpNet(nn.Module):
         self.fc1 = nn.Linear(obs_space.spaces["image"].shape[0], out_features=n_hidden)
         self.fc2 = nn.Linear(n_hidden, out_features=n_hidden)
         self.fc3 = nn.Linear(n_hidden, action_space.n)
+
         self.apply(init_weights)
 
     def forward(self, state):

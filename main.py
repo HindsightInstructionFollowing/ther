@@ -24,12 +24,12 @@ device = 'cuda'
 
 config = dict()
 config["batch_size"] = 128
-config["lr"] = 1e-7
+config["lr"] = 1e-4
 config["replay_buffer_size"] = 10000
 config["gamma"] = 0.99
 config["device"] = "cuda"
-config["update_target_every"] = 200
-config["step_exploration"] = 2000
+config["update_target_every"] = 2000
+config["step_exploration"] = 20000
 
 # config["dqn_architecture"] = "conv"
 # missons_file_str = "gym-minigrid/gym_minigrid/envs/missions/fetch_train_easy_test.json"
@@ -61,8 +61,6 @@ tf_logger = SweetLogger(dump_step=300, path_to_log=expe_path)
 # When do you want to store images of q-function and corresponding state ?
 # Specify here :
 q_values_generator = QValueVisualizer(proba_log=0.1)
-
-
 print(env.observation_space)
 
 with display:
@@ -108,6 +106,15 @@ with display:
                                     dataformats="HWC")
 
         time_since_ep_start = time.time() - begin_ep_time
+
+        loss_mean = np.mean(tf_logger.variable_to_log['loss']['values'])
+        print("loss_mean {}".format(loss_mean))
+
+        # if loss_mean < 0.04:
+        #     model.target_net.load_state_dict(model.policy_net.state_dict(), strict=True)
+        #     print("Update")
+
+
         print("End of ep #{} Time since begin ep : {:.2f}, Time per step : {:.2f} Total iter : {}  iter this ep : {} rewrd : {:.3f}".format(
             episode_num, time_since_ep_start, time_since_ep_start / iter_this_ep, total_step, iter_this_ep, reward_this_ep))
 
