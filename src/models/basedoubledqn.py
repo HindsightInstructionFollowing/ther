@@ -56,7 +56,6 @@ class BaseDoubleDQN(nn.Module):
         else:
             # max(1) for the dim, [1] for the indice, [0] for the value
             q_values = self.policy_net(state).detach().cpu().numpy()[0]
-
             action = int(q_values.argmax())
 
         self.total_steps += 1
@@ -65,22 +64,24 @@ class BaseDoubleDQN(nn.Module):
     def end_of_episode(self, n_episodes):
         pass
 
-    def store_transitions(self, state, action, next_state, reward, done, mission, use_hindsight=False):
-        self.replay_buffer.add_transition(curr_state=state,
+    def store_transitions(self, state, action, next_state, reward, done, mission, mission_length=None, use_hindsight=False):
+        self.replay_buffer.add_transition(curr_state=state.cpu(),
                                           action=action,
                                           reward=reward,
-                                          next_state=next_state,
-                                          mission=mission,
+                                          next_state=next_state.cpu(),
+                                          mission=mission.cpu(),
+                                          mission_length=mission_length.cpu(),
                                           terminal=done)
 
     # Optimize the model
-    def optimize_model(self, state, action, next_state, reward, done, mission, environment_step):
+    def optimize_model(self, state, action, next_state, reward, done, environment_step):
 
-        self.store_transitions(state=state,
+        self.store_transitions(state=state["image"],
                                action=action,
-                               next_state=next_state,
+                               next_state=next_state["image"],
                                reward=reward,
-                               mission=mission,
+                               mission=next_state["mission"],
+                               mission_length=next_state["mission_length"],
                                done=done)
 
         if len(self.replay_buffer) < self.batch_size:
@@ -91,22 +92,23 @@ class BaseDoubleDQN(nn.Module):
         # Batch the transitions into one namedtuple
 
         batch_transitions = self.replay_buffer.transition(*zip(*transitions))
-        batch_curr_state = torch.cat(batch_transitions.curr_state)
-        batch_next_state = torch.cat(batch_transitions.next_state)
-        batch_terminal = torch.as_tensor(batch_transitions.terminal, dtype=torch.int32)
+        batch_curr_state = torch.cat(batch_transitions.curr_state).to(device=self.device)
+        batch_next_state = torch.cat(batch_transitions.next_state).to(device=self.device)
+        batch_terminal = torch.as_tensor(batch_transitions.terminal, dtype=torch.int32, device=self.device)
         batch_action = torch.as_tensor(batch_transitions.action, dtype=torch.long, device=self.device).reshape(-1, 1)
+        batch_mission_length = torch.cat(batch_transitions.mission_length)
 
-        text_length = [None] * self.batch_size
-        for ind, mission in enumerate(batch_transitions.mission):
-            text_length[ind] = mission.size(0)
-        batch_text_length = torch.tensor(text_length, dtype=torch.long).to(self.device)
+        # text_length = [None] * self.batch_size
+        # for ind, mission in enumerate(batch_transitions.mission):
+        #     text_length[ind] = mission.size(0)
+        # batch_mission_length = torch.tensor(text_length, dtype=torch.long).to(self.device)
         batch_mission = nn.utils.rnn.pad_sequence(batch_transitions.mission, batch_first=True).to(self.device)
 
         # Compute targets according to the Bellman eq
         batch_next_state_non_terminal_dict = {
             "image": batch_next_state[batch_terminal == 0],
             "mission": batch_mission[batch_terminal == 0],
-            "text_length": batch_text_length[batch_terminal == 0]
+            "mission_length": batch_mission_length[batch_terminal == 0]
         }
 
         # Evaluation of the Q value with the target net
@@ -126,7 +128,7 @@ class BaseDoubleDQN(nn.Module):
         batch_curr_state_dict = {
             "image": batch_curr_state,
             "mission": batch_mission,
-            "text_length": batch_text_length
+            "mission_length": batch_mission_length
         }
         predictions = self.policy_net(batch_curr_state_dict).gather(1, batch_action).view(-1)
 

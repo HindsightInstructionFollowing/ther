@@ -97,7 +97,8 @@ class MinigridConv(nn.Module):
         # state["mission"] contains list of indices
         embedded = self.word_embedding(state["mission"])
         # Pack padded batch of sequences for RNN module
-        packed = nn.utils.rnn.pack_padded_sequence(embedded, state["text_length"],
+        packed = nn.utils.rnn.pack_padded_sequence(input=embedded,
+                                                   lengths=state["mission_length"],
                                                    batch_first=True, enforce_sorted=False)
         # Forward pass through GRU
         outputs, hidden = self.text_rnn(packed)

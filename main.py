@@ -18,16 +18,15 @@ display = Xvfb(width=100, height=100, colordepth=16)
 # %%
 
 
-
 n_frame = 3
 device = 'cuda'
 
 config = dict()
-config["batch_size"] = 128
-config["lr"] = 1e-4
-config["replay_buffer_size"] = 10000
+config["batch_size"] = 256
+config["lr"] = 5e-4
+config["replay_buffer_size"] = 40000
 config["gamma"] = 0.99
-config["device"] = "cuda"
+config["device"] = device
 config["update_target_every"] = 2000
 config["step_exploration"] = 20000
 
@@ -36,6 +35,9 @@ config["step_exploration"] = 20000
 # env = FetchAttrEnv(size=6,
 #                    numObjs=3,
 #                    missions_file_str=missons_file_str)
+#
+# env = gym.make("MiniGrid-Empty-5x5-v0")
+
 # env = MinigridTorchWrapper(FrameStackerWrapper(LessActionAndObsWrapper(TextWrapper(env=env)), n_stack=n_frame), device=device)
 
 # %%
@@ -53,10 +55,10 @@ n_episodes = 10000
 total_step = 1
 
 # SweetLogger is a tensorboardXWriter with additionnal tool to help dealing with lists
-expe_path = "out_test/pole"
+expe_path = "out_test/small_minigrid"
 if os.path.exists(expe_path):
     shutil.rmtree(expe_path)
-tf_logger = SweetLogger(dump_step=300, path_to_log=expe_path)
+tf_logger = SweetLogger(dump_step=1000, path_to_log=expe_path)
 
 # When do you want to store images of q-function and corresponding state ?
 # Specify here :
@@ -80,19 +82,18 @@ with display:
             total_step += 1
             reward_this_ep += reward
 
-            loss = model.optimize_model(state=obs["image"],
+            loss = model.optimize_model(state=obs,
                                         action=act,
-                                        next_state=new_obs["image"],
+                                        next_state=new_obs,
                                         reward=reward,
                                         done=done,
-                                        mission=new_obs["mission"],
                                         environment_step=total_step)
 
             obs = new_obs
 
             tf_logger.log("loss", loss)
-            tf_logger.log("max_q_val", max(q_values))
-            tf_logger.log("min_q_val", min(q_values))
+            tf_logger.log("max_q_val", max(q_values), operation='max')
+            tf_logger.log("min_q_val", min(q_values), operation='min')
 
             # Dump tensorboard stats
             tf_logger.dump(total_step=total_step)

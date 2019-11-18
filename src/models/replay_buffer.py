@@ -8,7 +8,7 @@ class ReplayMemory(object):
     def __init__(self, size, seed=42):
         self.transition = collections.namedtuple("Transition",
                                                  ["curr_state", "action", "reward", "next_state", "terminal",
-                                                  "mission"])
+                                                  "mission", "mission_length"])
         self.stored_transitions = []
         self.memory_size = int(size)
         self.memory = [None for _ in range(self.memory_size)]
@@ -16,8 +16,11 @@ class ReplayMemory(object):
         self.len = 0
         random.seed(seed)
 
-    def add_transition(self, curr_state, action, reward, next_state, terminal, mission):
-        self.memory[self.position] = self.transition(curr_state, action, reward, next_state, terminal, mission)
+    def add_transition(self, curr_state, action, reward, next_state, terminal, mission, mission_length):
+
+        assert mission_length == mission.size(1), "Mission length doesn't match, 'mission_length' in state"
+        mission = mission[0]
+        self.memory[self.position] = self.transition(curr_state, action, reward, next_state, terminal, mission, mission_length)
         # self.memory.append(self.transition(curr_state, action, reward, next_state, terminal, mission))
         # if len(self.memory) > self.memory_size:
         #    del self.memory[0]
