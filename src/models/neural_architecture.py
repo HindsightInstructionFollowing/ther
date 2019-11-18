@@ -7,7 +7,8 @@ def init_weights(m):
         torch.nn.init.xavier_uniform_(m.weight)
         m.bias.data.fill_(0.01)
     elif type(m) == nn.Conv2d:
-        torch.nn.init.kaiming_normal_(m.weight, mode="fan_in", nonlinearity='relu')
+        torch.nn.init.xavier_normal_(m.weight)
+        m.bias.data.fill_(0.01)
 
 
 class MlpNet(nn.Module):
@@ -30,14 +31,16 @@ class MlpNet(nn.Module):
 
 
 class MinigridConv(nn.Module):
-    def __init__(self, obs_space, action_space, use_lstm_after_conv):
+    def __init__(self, obs_space, action_space, use_lstm_after_conv, ignore_text=True):
         super().__init__()
 
         if len(obs_space["image"].shape) == 4:
             f, c, h, w = obs_space["image"].shape
         else:
-            raise NotImplementedError("Image shape should be 4, is {}, try using frame stacker wrapper".format(
-                len(obs_space["image"].shape)))
+            c, h, w = obs_space["image"].shape
+            f = 1
+            # raise NotImplementedError("Image shape should be 4, is {}, try using frame stacker wrapper".format(
+            #     len(obs_space["image"].shape)))
 
         self.num_token = int(obs_space["mission"].high.max())
 
@@ -45,6 +48,7 @@ class MinigridConv(nn.Module):
 
         self.fc_text_embedding_size = 32
         self.lstm_after_conv = use_lstm_after_conv
+
         self.frames = f
         self.c = c
         self.h = h
@@ -70,13 +74,24 @@ class MinigridConv(nn.Module):
             nn.ReLU()
         )
 
-        self.word_embedding_size = 32
-        self.word_embedding = nn.Embedding(self.num_token, self.word_embedding_size)
-        self.rnn_text_embedding_size = 128
-        self.text_rnn = nn.GRU(self.word_embedding_size, self.rnn_text_embedding_size, batch_first=True)
-        self.fc_language = nn.Linear(in_features=self.rnn_text_embedding_size, out_features=self.fc_text_embedding_size)
+        self.fc_hidden_size = 64
 
-        self.fc_out = nn.Linear(in_features=self.fc_text_embedding_size + self.size_after_conv, out_features=self.n_actions)
+        self.ignore_text = ignore_text
+        if not self.ignore_text:
+            self.word_embedding_size = 32
+            self.word_embedding = nn.Embedding(self.num_token, self.word_embedding_size)
+            self.rnn_text_embedding_size = 128
+
+            self.text_rnn = nn.GRU(self.word_embedding_size, self.rnn_text_embedding_size, batch_first=True)
+            self.fc_language = nn.Linear(in_features=self.rnn_text_embedding_size, out_features=self.fc_text_embedding_size)
+
+            self.fc_hidden = nn.Linear(in_features=self.fc_text_embedding_size + self.size_after_conv, out_features=self.fc_hidden_size)
+
+        else:
+            self.fc_hidden = nn.Linear(in_features=self.size_after_conv, out_features=self.fc_hidden_size)
+
+
+        self.fc_out = nn.Linear(in_features=self.fc_hidden_size, out_features=self.n_actions)
 
         # Initialize network
         self.apply(init_weights)
@@ -95,16 +110,20 @@ class MinigridConv(nn.Module):
             flatten = out_conv.view(out_conv.shape[0], -1)
 
         # state["mission"] contains list of indices
-        embedded = self.word_embedding(state["mission"])
-        # Pack padded batch of sequences for RNN module
-        packed = nn.utils.rnn.pack_padded_sequence(input=embedded,
-                                                   lengths=state["mission_length"],
-                                                   batch_first=True, enforce_sorted=False)
+        # embedded = self.word_embedding(state["mission"])
+        # # Pack padded batch of sequences for RNN module
+        # packed = nn.utils.rnn.pack_padded_sequence(input=embedded,
+        #                                            lengths=state["mission_length"],
+        #                                            batch_first=True, enforce_sorted=False)
         # Forward pass through GRU
-        outputs, hidden = self.text_rnn(packed)
-        out_language = self.fc_language(hidden[0])
+        # outputs, hidden = self.text_rnn(packed)
+        # out_language = self.fc_language(hidden[0])
+        #
+        # out_language = F.relu(out_language)
 
-        out_language = F.relu(out_language)
+        # concat = torch.cat((flatten, out_language), dim=1)
 
-        concat = torch.cat((flatten, out_language), dim=1)
-        return self.fc_out(concat)
+        hidden_out = F.relu(self.fc_hidden(flatten))
+        out = self.fc_out(hidden_out)
+
+        return out

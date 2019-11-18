@@ -16,7 +16,7 @@ class BaseDoubleDQN(nn.Module):
         super(BaseDoubleDQN, self).__init__()
 
         if config["dqn_architecture"] == "conv":
-            nn_creator = lambda : MinigridConv(obs_space=obs_space, action_space=action_space, use_lstm_after_conv=True)
+            nn_creator = lambda : MinigridConv(obs_space=obs_space, action_space=action_space, use_lstm_after_conv=False)
         else:
             nn_creator = lambda : MlpNet(obs_space=obs_space, action_space=action_space)
 
@@ -25,7 +25,9 @@ class BaseDoubleDQN(nn.Module):
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
-        self.optimizer = torch.optim.RMSprop(self.policy_net.parameters(), lr=config["lr"], weight_decay=1e-3)
+        self.optimizer = torch.optim.RMSprop(self.policy_net.parameters(),
+                                             lr=config["lr"],
+                                             weight_decay=config["weight_decay"])
 
         self.batch_size = config["batch_size"]
         self.gamma = config["gamma"]
@@ -117,7 +119,7 @@ class BaseDoubleDQN(nn.Module):
         # Double DQN
         if torch.sum(batch_terminal) != self.batch_size:
             # Selection of the action with the policy net
-            args_actions = self.target_net(batch_next_state_non_terminal_dict).max(1)[1].reshape(-1, 1)
+            args_actions = self.policy_net(batch_next_state_non_terminal_dict).max(1)[1].reshape(-1, 1)
             targets[batch_terminal == 0] = targets[batch_terminal == 0] \
                                        + self.gamma \
                                        * self.target_net(batch_next_state_non_terminal_dict).gather(1, args_actions).detach()
@@ -143,27 +145,26 @@ class BaseDoubleDQN(nn.Module):
             param.grad.data.clamp_(-1, 1)
 
         # self.old_parameters = dict()
-        # for k, v in self.policy_net.state_dict().items():
+        # for k, v in self.target_net.state_dict().items():
         #     self.old_parameters[k] = v.cpu()
 
         # Do the gradient descent step
         self.optimizer.step()
 
-        # self.new_parameters = dict()
-        # for k,v in self.policy_net.state_dict().items():
-        #     self.new_parameters[k] = v.cpu()
-        #
-        # self.check_weigths_change()
-
         if environment_step % self.update_target_every == 0:
             self.target_net.load_state_dict(self.policy_net.state_dict())
             self.n_update_target += 1
+
+        # self.new_parameters = dict()
+        # for k,v in self.target_net.state_dict().items():
+        #     self.new_parameters[k] = v.cpu()
+        # self.check_weigths_change()
 
         return loss.detach().item()
 
     def check_weigths_change(self):
         for param_name in self.old_parameters:
-            assert not torch.equal(self.new_parameters[param_name], self.old_parameters[param_name]),\
-                "param {} didn't change".format(param_name)
+            assert torch.equal(self.new_parameters[param_name], self.old_parameters[param_name]),\
+                "param {} changed".format(param_name)
 
 

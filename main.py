@@ -3,8 +3,8 @@ import gym
 import numpy as np
 from models.basedoubledqn import BaseDoubleDQN
 from gym_minigrid.envs.fetch_attr import FetchAttrEnv
-from gym_minigrid.wrappers import LessActionAndObsWrapper, TextWrapper, FrameStackerWrapper,\
-    MinigridTorchWrapper, TorchWrapper, CartPoleWrapper
+from gym_minigrid.wrappers import TextWrapper, FrameStackerWrapper, MinigridTorchWrapper,\
+    TorchWrapper, CartPoleWrapper, RemoveUselessActionWrapper, RemoveUselessChannelWrapper
 from image_helper import QValueVisualizer
 
 from logging_helper import SweetLogger
@@ -29,36 +29,37 @@ config["gamma"] = 0.99
 config["device"] = device
 config["update_target_every"] = 2000
 config["step_exploration"] = 20000
+config["weight_decay"] = 0
 
-# config["dqn_architecture"] = "conv"
-# missons_file_str = "gym-minigrid/gym_minigrid/envs/missions/fetch_train_easy_test.json"
-# env = FetchAttrEnv(size=6,
-#                    numObjs=3,
-#                    missions_file_str=missons_file_str)
-#
-# env = gym.make("MiniGrid-Empty-5x5-v0")
-
-# env = MinigridTorchWrapper(FrameStackerWrapper(LessActionAndObsWrapper(TextWrapper(env=env)), n_stack=n_frame), device=device)
+config["dqn_architecture"] = "conv"
+missons_file_str = "gym-minigrid/gym_minigrid/envs/missions/fetch_train_easy_test.json"
+env = FetchAttrEnv(size=6,
+                   numObjs=3,
+                   missions_file_str=missons_file_str)
+env = MinigridTorchWrapper(RemoveUselessActionWrapper(TextWrapper(gym.make("MiniGrid-Empty-5x5-v0"))), device=device)
+#env = MinigridTorchWrapper(FrameStackerWrapper(LessActionAndObsWrapper(TextWrapper(env=env)), n_stack=n_frame), device=device)
 
 # %%
 
-config["dqn_architecture"] = "mlp"
-env = TorchWrapper(CartPoleWrapper(gym.make("CartPole-v1")), device=device)
+# config["dqn_architecture"] = "mlp"
+# env = TorchWrapper(CartPoleWrapper(gym.make("CartPole-v1")), device=device)
+
+# %%
+
 
 model = BaseDoubleDQN(obs_space=env.observation_space,
                       action_space=env.action_space,
                       config=config
                       )
-# %%
 
 n_episodes = 10000
 total_step = 1
 
 # SweetLogger is a tensorboardXWriter with additionnal tool to help dealing with lists
-expe_path = "out_test/small_minigrid"
+expe_path = "out_test/small_minigrid3"
 if os.path.exists(expe_path):
     shutil.rmtree(expe_path)
-tf_logger = SweetLogger(dump_step=1000, path_to_log=expe_path)
+tf_logger = SweetLogger(dump_step=5000, path_to_log=expe_path)
 
 # When do you want to store images of q-function and corresponding state ?
 # Specify here :
@@ -121,8 +122,5 @@ with display:
 
         tf_logger.log("reward", reward_this_ep)
         tf_logger.log("epsilon", model.current_epsilon)
-
-
-
 
 
