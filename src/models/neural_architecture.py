@@ -12,7 +12,7 @@ def init_weights(m):
 
 
 class MlpNet(nn.Module):
-    def __init__(self, obs_space, action_space):
+    def __init__(self, obs_space, action_space, config):
         super().__init__()
         n_hidden = 20
 
@@ -31,9 +31,10 @@ class MlpNet(nn.Module):
 
 
 class MinigridConv(nn.Module):
-    def __init__(self, obs_space, action_space, use_lstm_after_conv, ignore_text=True):
+    def __init__(self, obs_space, action_space, config):
         super().__init__()
 
+        # If frame stacker
         if len(obs_space["image"].shape) == 4:
             f, c, h, w = obs_space["image"].shape
         else:
@@ -47,7 +48,8 @@ class MinigridConv(nn.Module):
         self.n_actions = action_space.n
 
         self.fc_text_embedding_size = 32
-        self.lstm_after_conv = use_lstm_after_conv
+
+        self.lstm_after_conv = config["use_lstm_after_conv"]
 
         self.frames = f
         self.c = c
@@ -62,7 +64,7 @@ class MinigridConv(nn.Module):
         if self.lstm_after_conv:
             self.memory_rnn = nn.LSTM(self.size_after_conv, self.size_after_conv, batch_first=True)
 
-        frames_conv_net = 1 if use_lstm_after_conv else self.frames
+        frames_conv_net = 1 if self.lstm_after_conv else self.frames
 
         self.conv_net = nn.Sequential(
             nn.Conv2d(c * frames_conv_net, 16, (2, 2)),
@@ -76,7 +78,7 @@ class MinigridConv(nn.Module):
 
         self.fc_hidden_size = 64
 
-        self.ignore_text = ignore_text
+        self.ignore_text = config["ignore_text"]
         if not self.ignore_text:
             self.word_embedding_size = 32
             self.word_embedding = nn.Embedding(self.num_token, self.word_embedding_size)
@@ -109,19 +111,19 @@ class MinigridConv(nn.Module):
             out_conv = self.conv_net(state["image"])
             flatten = out_conv.view(out_conv.shape[0], -1)
 
-        # state["mission"] contains list of indices
-        # embedded = self.word_embedding(state["mission"])
-        # # Pack padded batch of sequences for RNN module
-        # packed = nn.utils.rnn.pack_padded_sequence(input=embedded,
-        #                                            lengths=state["mission_length"],
-        #                                            batch_first=True, enforce_sorted=False)
-        # Forward pass through GRU
-        # outputs, hidden = self.text_rnn(packed)
-        # out_language = self.fc_language(hidden[0])
-        #
-        # out_language = F.relu(out_language)
+        if not self.ignore_text:
+            # state["mission"] contains list of indices
+            embedded = self.word_embedding(state["mission"])
+            # Pack padded batch of sequences for RNN module
+            packed = nn.utils.rnn.pack_padded_sequence(input=embedded,
+                                                       lengths=state["mission_length"],
+                                                       batch_first=True, enforce_sorted=False)
+            # Forward pass through GRU
+            outputs, hidden = self.text_rnn(packed)
+            out_language = self.fc_language(hidden[0])
 
-        # concat = torch.cat((flatten, out_language), dim=1)
+            out_language = F.relu(out_language)
+            flatten = torch.cat((flatten, out_language), dim=1)
 
         hidden_out = F.relu(self.fc_hidden(flatten))
         out = self.fc_out(hidden_out)

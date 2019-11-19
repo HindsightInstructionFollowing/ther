@@ -16,12 +16,12 @@ class BaseDoubleDQN(nn.Module):
         super(BaseDoubleDQN, self).__init__()
 
         if config["architecture"] == "conv":
-            nn_creator = lambda : MinigridConv(obs_space=obs_space, action_space=action_space, use_lstm_after_conv=False)
+            nn_creator = MinigridConv
         else:
-            nn_creator = lambda : MlpNet(obs_space=obs_space, action_space=action_space)
+            nn_creator = MlpNet
 
-        self.policy_net = nn_creator()
-        self.target_net = nn_creator()
+        self.policy_net = nn_creator(obs_space=obs_space, action_space=action_space, config=config["architecture_params"])
+        self.target_net = nn_creator(obs_space=obs_space, action_space=action_space, config=config["architecture_params"])
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 

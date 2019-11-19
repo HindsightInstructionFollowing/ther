@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_base",
+  "name" : "minigrid_fetch_base",
   "algo" : "dqn",
   "device" : "cuda",
 
@@ -7,6 +7,8 @@
 
     "architecture" : "conv",
     "architecture_params" : {
+      "ignore_text" : false,
+      "use_lstm_after_conv" : true
     },
 
     "batch_size" : 256,
@@ -20,7 +22,7 @@
   },
 
   "wrappers_model" : [
-    {"name" : "RemoveUselessChannelWrapper", "params" : {"n_channel" : 3}},
+    {"name" : "RemoveUselessChannelWrapper", "params" : {}},
     {"name" : "RemoveUselessActionWrapper", "params" : {}},
     {"name" : "FrameStackerWrapper", "params" : {"n_stack" : 4}},
     {"name" : "MinigridTorchWrapper", "params" : {"device" : "cuda"}}
