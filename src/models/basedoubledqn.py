@@ -10,12 +10,12 @@ from models.replay_buffer import ReplayMemory
 class BaseDoubleDQN(nn.Module):
 
     #def __init__(self, h, w, c, n_actions, frames, lr, num_token, device, use_memory, use_text):
-    def __init__(self, obs_space, action_space, config, writer=None):
+    def __init__(self, obs_space, action_space, config, device='cpu', writer=None):
         """
         """
         super(BaseDoubleDQN, self).__init__()
 
-        if config["dqn_architecture"] == "conv":
+        if config["architecture"] == "conv":
             nn_creator = lambda : MinigridConv(obs_space=obs_space, action_space=action_space, use_lstm_after_conv=False)
         else:
             nn_creator = lambda : MlpNet(obs_space=obs_space, action_space=action_space)
@@ -44,7 +44,7 @@ class BaseDoubleDQN(nn.Module):
         self.update_target_every = config["update_target_every"]
         self.n_update_target = 0
 
-        self.device = config["device"]
+        self.device = device
         self.to(self.device)
 
     def select_action(self, state):

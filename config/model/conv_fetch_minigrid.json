@@ -1,0 +1,32 @@
+{
+  "name" : "minigrid_base",
+  "algo" : "dqn",
+  "device" : "cuda",
+
+  "algo_params": {
+
+    "architecture" : "conv",
+    "architecture_params" : {
+    },
+
+    "batch_size" : 256,
+    "lr" : 5e-4,
+    "replay_buffer_size" : 40000,
+    "gamma" : 0.99,
+    "update_target_every" : 2000,
+    "step_exploration" : 20000,
+    "weight_decay" : 0,
+    "n_stack_frame" : 1
+  },
+
+  "wrappers_model" : [
+    {"name" : "RemoveUselessChannelWrapper", "params" : {"n_channel" : 3}},
+    {"name" : "RemoveUselessActionWrapper", "params" : {}},
+    {"name" : "FrameStackerWrapper", "params" : {"n_stack" : 4}},
+    {"name" : "MinigridTorchWrapper", "params" : {"device" : "cuda"}}
+  ]
+
+}
+
+
+

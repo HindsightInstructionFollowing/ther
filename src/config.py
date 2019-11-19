@@ -37,14 +37,17 @@ def check_json_intregrity(config_file_path, config_dict):
     config_file = open(config_file_path, 'r')
     config_dict_loaded = json.load(config_file)
 
-    assert config_dict_loaded == config_dict, \
-        """
-        Error in config file handling, config_file on disk and this one must be the same !"
-        config_dict :        {}
-        ========
-        config_dict_loaded : {}
+    if config_dict_loaded != config_dict:
+        print("Warning, config on disk and specified by params are different")
 
-        """.format(config_dict, config_dict_loaded)
+    # assert config_dict_loaded == config_dict, \
+    #     """
+    #     Error in config file handling, config_file on disk and this one must be the same !"
+    #     config_dict :        {}
+    #     ========
+    #     config_dict_loaded : {}
+    #
+    #     """.format(config_dict, config_dict_loaded)
 
 
 def load_config(env_config_file, model_config_file, seed,
