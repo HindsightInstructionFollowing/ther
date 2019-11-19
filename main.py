@@ -13,7 +13,8 @@ import os
 import shutil
 
 from xvfbwrapper import Xvfb
-display = Xvfb(width=100, height=100, colordepth=16)
+#display = Xvfb(width=100, height=100, colordepth=16)
+display = open("empty_context.txt", 'w')
 
 # %%
 
@@ -59,7 +60,7 @@ total_step = 1
 expe_path = "out_test/small_minigrid3"
 if os.path.exists(expe_path):
     shutil.rmtree(expe_path)
-tf_logger = SweetLogger(dump_step=5000, path_to_log=expe_path)
+tf_logger = SweetLogger(dump_step=1000, path_to_log=expe_path)
 
 # When do you want to store images of q-function and corresponding state ?
 # Specify here :
