@@ -15,9 +15,10 @@ from xvfbwrapper import Xvfb
 
 from config import load_config
 
-def train(model_config, env_config, out_dir, seed, local_test=None):
+def train(model_config, env_config, out_dir, seed, model_ext, local_test=None):
 
     full_config, expe_path = load_config(model_config_file=model_config,
+                                         model_ext_file=model_ext,
                                          env_config_file=env_config,
                                          out_dir=out_dir,
                                          seed=seed)
@@ -145,7 +146,7 @@ if __name__ == "__main__":
     parser.add_argument("-env_config", type=str)
     #parser.add_argument("-env_ext", type=str)
     parser.add_argument("-model_config", type=str)
-    #parser.add_argument("-model_ext", type=str)
+    parser.add_argument("-model_ext", type=str)
     parser.add_argument("-exp_dir", type=str, default="out", help="Directory all results")
     parser.add_argument("-seed", type=int, default=42, help="Random seed used")
     #parser.add_argument("-local_test", type=bool, default=False, help="If env is run on my PC or a headless server")
@@ -155,7 +156,7 @@ if __name__ == "__main__":
     train(env_config=args.env_config,
           #args.env_ext,
           model_config=args.model_config,
-          #args.model_ext,
+          model_ext=args.model_ext,
           out_dir=args.exp_dir,
           seed=args.seed
           )

@@ -7,7 +7,7 @@ def init_weights(m):
         torch.nn.init.xavier_uniform_(m.weight)
         m.bias.data.fill_(0.01)
     elif type(m) == nn.Conv2d:
-        torch.nn.init.xavier_normal_(m.weight)
+        torch.nn.init.xavier_normal_(m.weight, gain=.1)
         m.bias.data.fill_(0.01)
 
 
@@ -76,24 +76,22 @@ class MinigridConv(nn.Module):
             nn.ReLU()
         )
 
-        self.fc_hidden_size = 64
 
         self.ignore_text = config["ignore_text"]
         if not self.ignore_text:
             self.word_embedding_size = 32
             self.word_embedding = nn.Embedding(self.num_token, self.word_embedding_size)
-            self.rnn_text_embedding_size = 128
+            self.rnn_text_hidden_size = 128
 
-            self.text_rnn = nn.GRU(self.word_embedding_size, self.rnn_text_embedding_size, batch_first=True)
-            self.fc_language = nn.Linear(in_features=self.rnn_text_embedding_size, out_features=self.fc_text_embedding_size)
+            self.text_rnn = nn.GRU(self.word_embedding_size, self.rnn_text_hidden_size, batch_first=True)
+            self.fc_language = nn.Linear(in_features=self.rnn_text_hidden_size, out_features=self.fc_text_embedding_size)
 
-            self.fc_hidden = nn.Linear(in_features=self.fc_text_embedding_size + self.size_after_conv, out_features=self.fc_hidden_size)
+            self.size_hidden = self.fc_text_embedding_size + self.size_after_conv
 
         else:
-            self.fc_hidden = nn.Linear(in_features=self.size_after_conv, out_features=self.fc_hidden_size)
+            self.size_hidden = self.size_after_conv
 
-
-        self.fc_out = nn.Linear(in_features=self.fc_hidden_size, out_features=self.n_actions)
+        self.fc_out = nn.Linear(in_features=self.size_hidden, out_features=self.n_actions)
 
         # Initialize network
         self.apply(init_weights)
@@ -125,7 +123,7 @@ class MinigridConv(nn.Module):
             out_language = F.relu(out_language)
             flatten = torch.cat((flatten, out_language), dim=1)
 
-        hidden_out = F.relu(self.fc_hidden(flatten))
-        out = self.fc_out(hidden_out)
+        # hidden_out = F.relu(self.fc_hidden(flatten))
+        out = self.fc_out(flatten)
 
         return out

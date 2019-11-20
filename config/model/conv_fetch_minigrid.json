@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_fetch_base",
+  "name" : "minigrid_fetch_base_1e-5",
   "algo" : "dqn",
   "device" : "cuda",
 
@@ -11,8 +11,8 @@
       "use_lstm_after_conv" : true
     },
 
-    "batch_size" : 256,
-    "lr" : 5e-4,
+    "batch_size" : 64,
+    "lr" : 1e-5,
     "replay_buffer_size" : 40000,
     "gamma" : 0.99,
     "update_target_every" : 2000,

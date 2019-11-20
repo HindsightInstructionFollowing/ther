@@ -1,0 +1,16 @@
+{
+  "name" : "test_shit",
+
+  "algo_params": {
+
+    "architecture_params" : {
+    },
+
+    "weight_decay" : 1e-5
+
+  }
+
+}
+
+
+

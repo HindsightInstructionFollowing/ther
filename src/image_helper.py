@@ -33,6 +33,7 @@ class QValueVisualizer(object):
             fig.add_subplot(121)
 
             plt.imshow(game.render('rgb_array'))
+            plt.title(game.unwrapped.mission)
 
             f = plt.gcf()
             f.set_size_inches(9, 5)
@@ -50,7 +51,9 @@ class QValueVisualizer(object):
             plt.xlabel('action', fontsize=16)
             plt.ylabel('q_value', fontsize=16)
 
+
             plt.tight_layout()
+
 
             fig.canvas.draw()
             array_rendered = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
