@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_fetch_base_1e-5_1_frame",
+  "name" : "minigrid_fetch_dueling",
   "algo" : "dqn",
   "device" : "cuda",
 

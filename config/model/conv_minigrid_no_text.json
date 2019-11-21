@@ -21,8 +21,7 @@
     "gamma" : 0.99,
     "update_target_every" : 2000,
     "step_exploration" : 20000,
-    "weight_decay" : 0,
-    "n_stack_frame" : 1
+    "weight_decay" : 0
   },
 
   "wrappers_model" : [
