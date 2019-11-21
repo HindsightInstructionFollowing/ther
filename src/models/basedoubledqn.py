@@ -47,6 +47,8 @@ class BaseDoubleDQN(nn.Module):
         self.device = device
         self.to(self.device)
 
+        self.writer = writer
+
     def select_action(self, state):
 
         self.current_epsilon = max(self.epsilon_init - self.total_steps * (self.epsilon_init - self.epsilon_min)
@@ -159,6 +161,10 @@ class BaseDoubleDQN(nn.Module):
         # for k,v in self.target_net.state_dict().items():
         #     self.new_parameters[k] = v.cpu()
         # self.check_weigths_change()
+
+        if self.writer:
+            self.writer.log("percent_terminal", batch_terminal.sum().item()/self.batch_size)
+            self.writer.log("n_update_target", self.n_update_target)
 
         return loss.detach().item()
 

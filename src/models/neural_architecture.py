@@ -34,38 +34,22 @@ class MinigridConv(nn.Module):
     def __init__(self, obs_space, action_space, config):
         super().__init__()
 
+        # ================= VISION ====================
+        # =============================================
         # If frame stacker
         if len(obs_space["image"].shape) == 4:
             f, c, h, w = obs_space["image"].shape
         else:
             c, h, w = obs_space["image"].shape
             f = 1
-            # raise NotImplementedError("Image shape should be 4, is {}, try using frame stacker wrapper".format(
-            #     len(obs_space["image"].shape)))
 
-        self.num_token = int(obs_space["mission"].high.max())
-
-        self.n_actions = action_space.n
-
-        self.fc_text_embedding_size = 32
+        self.frames = f # Number of stacked frames
+        self.channel = c
+        self.height = h
+        self.width = w
 
         self.lstm_after_conv = config["use_lstm_after_conv"]
-
-        self.frames = f
-        self.c = c
-        self.h = h
-        self.w = w
-
-        output_conv_h = ((h - 1) // 2 - 2)  # h-3 without maxpooling
-        output_conv_w = ((w - 1) // 2 - 2)  # w-3 without maxpooling
-
-        self.size_after_conv = 64 * output_conv_h * output_conv_w
-
-        if self.lstm_after_conv:
-            self.memory_rnn = nn.LSTM(self.size_after_conv, self.size_after_conv, batch_first=True)
-
         frames_conv_net = 1 if self.lstm_after_conv else self.frames
-
         self.conv_net = nn.Sequential(
             nn.Conv2d(c * frames_conv_net, 16, (2, 2)),
             nn.ReLU(),
@@ -76,22 +60,54 @@ class MinigridConv(nn.Module):
             nn.ReLU()
         )
 
+        output_conv_h = ((h - 1) // 2 - 2)  # h-3 without maxpooling
+        output_conv_w = ((w - 1) // 2 - 2)  # w-3 without maxpooling
+        self.size_after_conv = 64 * output_conv_h * output_conv_w
 
+        # Encode each frame and then pass them through a rnn
+        if self.lstm_after_conv:
+            self.memory_rnn = nn.LSTM(self.size_after_conv, self.size_after_conv, batch_first=True)
+
+        # ====================== TEXT ======================
+        # ==================================================
+        self.fc_text_embedding_size = config["fc_text_embedding_hidden"]
+        self.num_token =              int(obs_space["mission"].high.max())
+        self.last_hidden_fc_size =    config["last_hidden_fc_size"]
+
+        # Mission : word embedding => gru => linear => concat with vision
         self.ignore_text = config["ignore_text"]
         if not self.ignore_text:
-            self.word_embedding_size = 32
+            self.word_embedding_size =       32
+            self.rnn_text_hidden_size =      config["rnn_text_hidden_size"]
+            self.size_after_text_viz_merge = self.fc_text_embedding_size + self.size_after_conv
+
             self.word_embedding = nn.Embedding(self.num_token, self.word_embedding_size)
-            self.rnn_text_hidden_size = 128
-
-            self.text_rnn = nn.GRU(self.word_embedding_size, self.rnn_text_hidden_size, batch_first=True)
-            self.fc_language = nn.Linear(in_features=self.rnn_text_hidden_size, out_features=self.fc_text_embedding_size)
-
-            self.size_hidden = self.fc_text_embedding_size + self.size_after_conv
+            self.text_rnn =       nn.GRU(self.word_embedding_size, self.rnn_text_hidden_size, batch_first=True)
+            self.fc_language =    nn.Linear(in_features=self.rnn_text_hidden_size,
+                                            out_features=self.fc_text_embedding_size)
 
         else:
-            self.size_hidden = self.size_after_conv
+            self.size_after_text_viz_merge = self.size_after_conv
 
-        self.fc_out = nn.Linear(in_features=self.size_hidden, out_features=self.n_actions)
+        # ================ Q-values, V, Advantages =========
+        # ==================================================
+        self.n_actions =           action_space.n
+        self.dueling =             config["dueling_architecture"]
+        self.last_hidden_fc_size = config["last_hidden_fc_size"]
+
+        if self.dueling:
+            self.value_graph = nn.Sequential(
+                nn.Linear(self.size_after_text_viz_merge, self.last_hidden_fc_size),
+                nn.ReLU(),
+                nn.Linear(self.last_hidden_fc_size, 1)
+            )
+
+        # If dueling is not used, this is normal Q-values
+        self.advantages_graph = nn.Sequential(
+                nn.Linear(self.size_after_text_viz_merge, self.last_hidden_fc_size),
+                nn.ReLU(),
+                nn.Linear(self.last_hidden_fc_size, self.n_actions)
+            )
 
         # Initialize network
         self.apply(init_weights)
@@ -101,7 +117,7 @@ class MinigridConv(nn.Module):
         if self.lstm_after_conv:
             batch_dim = state["image"].shape[0]
 
-            out_conv = self.conv_net(state["image"].reshape(-1, self.c, self.h, self.w))
+            out_conv = self.conv_net(state["image"].reshape(-1, self.channel, self.height, self.width))
             out_conv = out_conv.reshape(batch_dim, self.frames, -1)
             (outputs, (h_t, c_t)) = self.memory_rnn(out_conv)
             flatten = h_t[0] # get last ht
@@ -118,12 +134,16 @@ class MinigridConv(nn.Module):
                                                        batch_first=True, enforce_sorted=False)
             # Forward pass through GRU
             outputs, hidden = self.text_rnn(packed)
-            out_language = self.fc_language(hidden[0])
+            out_language =    self.fc_language(hidden[0])
 
             out_language = F.relu(out_language)
-            flatten = torch.cat((flatten, out_language), dim=1)
+            flatten =      torch.cat((flatten, out_language), dim=1)
 
         # hidden_out = F.relu(self.fc_hidden(flatten))
-        out = self.fc_out(flatten)
+        qvals = self.advantages_graph(flatten)
 
-        return out
+        if self.dueling:
+            values = self.value_graph(flatten)
+            qvals =  values + qvals - qvals.mean()
+
+        return qvals

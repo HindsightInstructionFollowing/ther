@@ -23,8 +23,20 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test=None):
                                          out_dir=out_dir,
                                          seed=seed)
 
+    #todo Some gym env require a fake display
     #display = Xvfb(width=100, height=100, colordepth=16)
     display = open("empty_context.txt", 'w')
+
+    # =================== LOGGING =======================
+    # ===================================================
+
+    # SweetLogger is a tensorboardXWriter with additionnal tool to help dealing with lists
+    tf_logger = SweetLogger(dump_step=full_config["dump_log_every"], path_to_log=expe_path)
+
+    # When do you want to store images of q-function and corresponding state ?
+    # Specify here :
+    q_values_generator = QValueVisualizer(proba_log=full_config["q_visualizer_proba_log"],
+                                          ep_num_to_log=full_config["q_visualizer_ep_num_to_log"])
 
     # =================== LOADING ENV =====================
     # =====================================================
@@ -32,19 +44,17 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test=None):
         env = gym.make(full_config["gym_name"])
     else:
         env_params = full_config["env_params"]
-        size = env_params["size"]
-        numObjs = env_params["numObjs"]
-        missions_file_str = env_params["missions_file_str"]
 
-        env = FetchAttrEnv(size=size,
-                           numObjs=numObjs,
-                           missions_file_str=missions_file_str)
+        env = FetchAttrEnv(size=env_params["size"],
+                           numObjs=env_params["numObjs"],
+                           missions_file_str=env_params["missions_file_str"],
+                           single_mission=env_params["single_mission"])
 
     # =================== APPLYING WRAPPER =====================
     # ==========================================================
 
-    # First, wrappers defining the env
-    # Then, wrappers useful for model
+    # First, wrappers defined in    env_config
+    # Then, wrappers defined in     model_config
     wrappers_list_dict = full_config["wrappers_env"]
     wrappers_list_dict.extend(full_config["wrappers_model"])
 
@@ -59,22 +69,11 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test=None):
     model = BaseDoubleDQN(obs_space=env.observation_space,
                           action_space=env.action_space,
                           config=full_config["algo_params"],
-                          device=full_config["device"]
+                          device=full_config["device"],
+                          writer=tf_logger
                           )
 
-    # =================== LOGGING =======================
-    # ===================================================
-
-    # SweetLogger is a tensorboardXWriter with additionnal tool to help dealing with lists
-    tf_logger = SweetLogger(dump_step=full_config["dump_log_every"], path_to_log=expe_path)
-
-    # When do you want to store images of q-function and corresponding state ?
-    # Specify here :
-    q_values_generator = QValueVisualizer(proba_log=full_config["q_visualizer_proba_log"],
-                                          ep_num_to_log=full_config["q_visualizer_ep_num_to_log"])
     print(env.observation_space)
-
-
     # ================ TRAINING HERE ===============
     # ==============================================
     with display:
@@ -124,15 +123,12 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test=None):
 
             loss_mean = np.mean(tf_logger.variable_to_log['loss']['values'])
             print("loss_mean {}".format(loss_mean))
-
-            # if loss_mean < 0.04:
-            #     model.target_net.load_state_dict(model.policy_net.state_dict(), strict=True)
-            #     print("Update")
-
-
             print("End of ep #{} Time since begin ep : {:.2f}, Time per step : {:.2f} Total iter : {}  iter this ep : {} rewrd : {:.3f}".format(
                 episode_num, time_since_ep_start, time_since_ep_start / iter_this_ep, total_step, iter_this_ep, reward_this_ep))
 
+            tf_logger.log("n_iter_per_ep", iter_this_ep)
+            tf_logger.log("wrong_pick", int(iter_this_ep < env.unwrapped.max_steps and reward_this_ep == 0))
+            tf_logger.log("time_out", int(iter_this_ep >= env.unwrapped.max_steps))
             tf_logger.log("reward", reward_this_ep)
             tf_logger.log("epsilon", model.current_epsilon)
 
