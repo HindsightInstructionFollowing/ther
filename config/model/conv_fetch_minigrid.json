@@ -12,7 +12,8 @@
       "rnn_text_hidden_size" : 128,
       "fc_text_embedding_hidden" : 32,
       "last_hidden_fc_size" : 64,
-      "dueling_architecture" : true
+      "dueling_architecture" : true,
+      "learn_text" : true
 
     },
 

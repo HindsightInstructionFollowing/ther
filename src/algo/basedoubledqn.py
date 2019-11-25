@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.neural_architecture import MinigridConv, MlpNet
-from models.replay_buffer import ReplayMemory
+from algo.neural_architecture import MinigridConv, MlpNet
+from algo.replay_buffer import ReplayMemory
 
 class BaseDoubleDQN(nn.Module):
 
@@ -144,7 +144,8 @@ class BaseDoubleDQN(nn.Module):
 
         # Keep the gradient between (-1,1). Works like one uses L1 loss for large gradients (see Huber loss)
         for name, param in self.policy_net.named_parameters():
-            param.grad.data.clamp_(-1, 1)
+            if hasattr(param.grad, 'data'):
+                param.grad.data.clamp_(-1, 1)
 
         # self.old_parameters = dict()
         # for k, v in self.target_net.state_dict().items():

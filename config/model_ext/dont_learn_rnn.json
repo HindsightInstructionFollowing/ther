@@ -1,0 +1,15 @@
+{
+  "name" : "dont_learn_rnn",
+
+  "algo_params": {
+
+    "architecture_params" : {
+      "learn_text" : false
+    }
+
+  }
+
+}
+
+
+

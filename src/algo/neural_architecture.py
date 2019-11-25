@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+import contextlib
 
 def init_weights(m):
     if type(m) == nn.Linear:
@@ -86,8 +87,13 @@ class MinigridConv(nn.Module):
             self.fc_language =    nn.Linear(in_features=self.rnn_text_hidden_size,
                                             out_features=self.fc_text_embedding_size)
 
+
+            self.text_context = contextlib.suppress() if config["learn_text"] else torch.no_grad()
+
         else:
             self.size_after_text_viz_merge = self.size_after_conv
+
+
 
         # ================ Q-values, V, Advantages =========
         # ==================================================
@@ -126,24 +132,27 @@ class MinigridConv(nn.Module):
             flatten = out_conv.view(out_conv.shape[0], -1)
 
         if not self.ignore_text:
-            # state["mission"] contains list of indices
-            embedded = self.word_embedding(state["mission"])
-            # Pack padded batch of sequences for RNN module
-            packed = nn.utils.rnn.pack_padded_sequence(input=embedded,
-                                                       lengths=state["mission_length"],
-                                                       batch_first=True, enforce_sorted=False)
-            # Forward pass through GRU
-            outputs, hidden = self.text_rnn(packed)
-            out_language =    self.fc_language(hidden[0])
 
-            out_language = F.relu(out_language)
-            flatten =      torch.cat((flatten, out_language), dim=1)
+            # Stop gradient or not
+            with self.text_context:
+                # state["mission"] contains list of indices
+                embedded = self.word_embedding(state["mission"])
+                # Pack padded batch of sequences for RNN module
+                packed = nn.utils.rnn.pack_padded_sequence(input=embedded,
+                                                           lengths=state["mission_length"],
+                                                           batch_first=True, enforce_sorted=False)
+                # Forward pass through GRU
+                outputs, hidden = self.text_rnn(packed)
+                out_language =    self.fc_language(hidden[0])
+                out_language =    F.relu(out_language)
+                flatten =         torch.cat((flatten, out_language), dim=1)
 
         # hidden_out = F.relu(self.fc_hidden(flatten))
         qvals = self.advantages_graph(flatten)
 
         if self.dueling:
             values = self.value_graph(flatten)
+            # qvals =  values + qvals - qvals.mean(dim=1, keepdim=True)
             qvals =  values + qvals - qvals.mean()
 
         return qvals

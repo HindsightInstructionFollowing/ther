@@ -1,7 +1,7 @@
 # %%
 import gym
 import numpy as np
-from models.basedoubledqn import BaseDoubleDQN
+from algo.basedoubledqn import BaseDoubleDQN
 from gym_minigrid.envs.fetch_attr import FetchAttrEnv
 from gym_minigrid.wrappers import Word2IndexWrapper, FrameStackerWrapper, MinigridTorchWrapper,\
     TorchWrapper, CartPoleWrapper, RemoveUselessActionWrapper, RemoveUselessChannelWrapper, wrap_env_from_list

@@ -4,6 +4,15 @@ import random
 import numpy as np
 
 
+class AbstractReplay(object):
+    def __init__(self):
+        pass
+
+    def add_transition(self):
+        pass
+    def sample(self):
+        pass
+
 class ReplayMemory(object):
     def __init__(self, size, seed=42):
         self.transition = collections.namedtuple("Transition",
