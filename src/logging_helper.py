@@ -40,6 +40,8 @@ class SweetLogger(SummaryWriter):
         self.dump_step = dump_step
         self.str2op = {'mean': np.mean, 'max': np.max, 'min': np.min}
 
+        self.next_dump_step = dump_step
+
     def log(self, key, value, operation='mean'):
         if key in self.variable_to_log:
             self.variable_to_log[key]['values'].append(value)
@@ -50,13 +52,16 @@ class SweetLogger(SummaryWriter):
 
     def dump(self, total_step):
 
-        if total_step % self.dump_step == 0:
+        if total_step > self.next_dump_step:
             for variable_name, var_dict in self.variable_to_log.items():
                 for op in var_dict['operation']:
                     operation_to_apply = self.str2op[op]
                     value = operation_to_apply(var_dict['values'])
-                    self.add_scalar("data/" + variable_name + '_' + op, value, total_step)
+                    self.add_scalar("data/" + variable_name + '_' + op, value, self.next_dump_step)
+
             self.reset()
+            self.next_dump_step += self.dump_step
+
 
     def reset(self):
         for key in self.variable_to_log.keys():

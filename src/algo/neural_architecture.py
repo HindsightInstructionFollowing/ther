@@ -3,6 +3,10 @@ from torch import nn
 import torch.nn.functional as F
 import contextlib
 
+from algo.pg_base import RecurrentACModel, ACModel
+from torch.distributions.categorical import Categorical
+
+
 def init_weights(m):
     if type(m) == nn.Linear:
         torch.nn.init.xavier_uniform_(m.weight)
@@ -30,8 +34,7 @@ class MlpNet(nn.Module):
         return self.fc3(out)
 
 
-
-class MinigridConv(nn.Module):
+class MinigridConv(nn.Module, RecurrentACModel):
     def __init__(self, obs_space, action_space, config):
         super().__init__()
 
@@ -87,29 +90,29 @@ class MinigridConv(nn.Module):
             self.fc_language =    nn.Linear(in_features=self.rnn_text_hidden_size,
                                             out_features=self.fc_text_embedding_size)
 
-
-            self.text_context = contextlib.suppress() if config["learn_text"] else torch.no_grad()
-
         else:
             self.size_after_text_viz_merge = self.size_after_conv
 
 
-
         # ================ Q-values, V, Advantages =========
         # ==================================================
-        self.n_actions =           action_space.n
-        self.dueling =             config["dueling_architecture"]
-        self.last_hidden_fc_size = config["last_hidden_fc_size"]
+        self.n_actions =               action_space.n
+        self.dueling_dqn =             config["dueling_architecture"]
+        self.last_hidden_fc_size =     config["last_hidden_fc_size"]
+        self.use_memory =              config["use_memory"]
+        self.memory_lstm_size =        self.size_after_text_viz_merge
 
-        if self.dueling:
-            self.value_graph = nn.Sequential(
-                nn.Linear(self.size_after_text_viz_merge, self.last_hidden_fc_size),
-                nn.ReLU(),
-                nn.Linear(self.last_hidden_fc_size, 1)
-            )
+        if self.use_memory:
+            self.memory_rnn = nn.LSTMCell(self.size_after_text_viz_merge, self.memory_lstm_size)
+
+        self.critic = nn.Sequential(
+            nn.Linear(self.size_after_text_viz_merge, self.last_hidden_fc_size),
+            nn.ReLU(), #todo : tanh ?
+            nn.Linear(self.last_hidden_fc_size, 1)
+        )
 
         # If dueling is not used, this is normal Q-values
-        self.advantages_graph = nn.Sequential(
+        self.actor = nn.Sequential(
                 nn.Linear(self.size_after_text_viz_merge, self.last_hidden_fc_size),
                 nn.ReLU(),
                 nn.Linear(self.last_hidden_fc_size, self.n_actions)
@@ -118,7 +121,21 @@ class MinigridConv(nn.Module):
         # Initialize network
         self.apply(init_weights)
 
-    def forward(self, state):
+    def _text_embedding(self, mission, mission_length):
+
+        # state["mission"] contains list of indices
+        embedded = self.word_embedding(mission)
+        # Pack padded batch of sequences for RNN module
+        packed = nn.utils.rnn.pack_padded_sequence(input=embedded,
+                                                   lengths=mission_length,
+                                                   batch_first=True, enforce_sorted=False)
+        # Forward pass through GRU
+        outputs, hidden = self.text_rnn(packed)
+        out_language = self.fc_language(hidden[0])
+        out_language = F.relu(out_language)
+        return out_language
+
+    def forward(self, state, memory=None):
 
         if self.lstm_after_conv:
             batch_dim = state["image"].shape[0]
@@ -126,33 +143,39 @@ class MinigridConv(nn.Module):
             out_conv = self.conv_net(state["image"].reshape(-1, self.channel, self.height, self.width))
             out_conv = out_conv.reshape(batch_dim, self.frames, -1)
             (outputs, (h_t, c_t)) = self.memory_rnn(out_conv)
-            flatten = h_t[0] # get last ht
+            flatten_vision_and_text = h_t[0] # get last ht
         else:
             out_conv = self.conv_net(state["image"])
-            flatten = out_conv.view(out_conv.shape[0], -1)
+            flatten_vision_and_text = out_conv.view(out_conv.shape[0], -1)
 
         if not self.ignore_text:
+            out_text = self._text_embedding(mission=state["mission"],
+                                            mission_length=state["mission_length"])
+            flatten_vision_and_text = torch.cat((flatten_vision_and_text, out_text), dim=1)
 
-            # Stop gradient or not
-            with self.text_context:
-                # state["mission"] contains list of indices
-                embedded = self.word_embedding(state["mission"])
-                # Pack padded batch of sequences for RNN module
-                packed = nn.utils.rnn.pack_padded_sequence(input=embedded,
-                                                           lengths=state["mission_length"],
-                                                           batch_first=True, enforce_sorted=False)
-                # Forward pass through GRU
-                outputs, hidden = self.text_rnn(packed)
-                out_language =    self.fc_language(hidden[0])
-                out_language =    F.relu(out_language)
-                flatten =         torch.cat((flatten, out_language), dim=1)
+        if self.use_memory:
+            hidden_memory = (memory[:, :self.semi_memory_size], memory[:, self.semi_memory_size:])
+            hidden_memory = self.memory_rnn(flatten_vision_and_text, hidden_memory)
+            flatten_vision_and_text = hidden_memory[0]
+            memory = torch.cat(hidden_memory, dim=1)
 
-        # hidden_out = F.relu(self.fc_hidden(flatten))
-        qvals = self.advantages_graph(flatten)
+        q_values = self.actor(flatten_vision_and_text)
+        next_state_values = self.critic(flatten_vision_and_text)
 
-        if self.dueling:
-            values = self.value_graph(flatten)
-            # qvals =  values + qvals - qvals.mean(dim=1, keepdim=True)
-            qvals =  values + qvals - qvals.mean()
+        if self.dueling_dqn:
+            # q_values =  next_state_values + q_values - q_values.mean(dim=1, keepdim=True)
+            q_values =  next_state_values + q_values - q_values.mean()
+            policy_dist = q_values
+        else:
+            policy_dist = Categorical(logits=F.log_softmax(q_values, dim=1))
+            next_state_values = next_state_values.view(-1)
 
-        return qvals
+        return policy_dist, next_state_values, memory
+
+    @property
+    def memory_size(self):
+        return 2*self.memory_lstm_size
+
+    @property
+    def semi_memory_size(self):
+        return self.memory_lstm_size

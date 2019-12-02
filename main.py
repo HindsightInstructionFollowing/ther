@@ -2,9 +2,10 @@
 import gym
 import numpy as np
 from algo.basedoubledqn import BaseDoubleDQN
+from algo.ppo import PPOAlgo
 from gym_minigrid.envs.fetch_attr import FetchAttrEnv
-from gym_minigrid.wrappers import Word2IndexWrapper, FrameStackerWrapper, MinigridTorchWrapper,\
-    TorchWrapper, CartPoleWrapper, RemoveUselessActionWrapper, RemoveUselessChannelWrapper, wrap_env_from_list
+from gym_minigrid.wrappers import wrap_env_from_list
+
 from image_helper import QValueVisualizer
 
 from logging_helper import SweetLogger
@@ -14,6 +15,7 @@ import shutil
 from xvfbwrapper import Xvfb
 
 from config import load_config
+import env_utils
 
 def train(model_config, env_config, out_dir, seed, model_ext, local_test=None):
 
@@ -23,10 +25,6 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test=None):
                                          out_dir=out_dir,
                                          seed=seed)
 
-    #todo Some gym env require a fake display
-    #display = Xvfb(width=100, height=100, colordepth=16)
-    display = open("empty_context.txt", 'w')
-
     # =================== LOGGING =======================
     # ===================================================
 
@@ -35,20 +33,19 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test=None):
 
     # When do you want to store images of q-function and corresponding state ?
     # Specify here :
-    q_values_generator = QValueVisualizer(proba_log=full_config["q_visualizer_proba_log"],
+    q_values_visualizer = QValueVisualizer(proba_log=full_config["q_visualizer_proba_log"],
                                           ep_num_to_log=full_config["q_visualizer_ep_num_to_log"])
 
     # =================== LOADING ENV =====================
     # =====================================================
     if full_config["gym_name"]:
-        env = gym.make(full_config["gym_name"])
+        env_creator = lambda : gym.make(full_config["gym_name"])
     else:
         env_params = full_config["env_params"]
-
-        env = FetchAttrEnv(size=env_params["size"],
-                           numObjs=env_params["numObjs"],
-                           missions_file_str=env_params["missions_file_str"],
-                           single_mission=env_params["single_mission"])
+        env_creator = lambda : FetchAttrEnv(size=env_params["size"],
+                                            numObjs=env_params["numObjs"],
+                                            missions_file_str=env_params["missions_file_str"],
+                                            single_mission=env_params["single_mission"])
 
     # =================== APPLYING WRAPPER =====================
     # ==========================================================
@@ -58,80 +55,35 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test=None):
     wrappers_list_dict = full_config["wrappers_env"]
     wrappers_list_dict.extend(full_config["wrappers_model"])
 
-    if len(wrappers_list_dict) > 0:
-        env = wrap_env_from_list(env, wrappers_list_dict)
+    envs = []
+    for i in range(full_config["algo_params"]["n_parallel_env"]):
+        new_env = wrap_env_from_list(env_creator(), wrappers_list_dict)
+        envs.append(new_env)
 
-    n_episodes = full_config["n_episodes"]
-    total_step = 1
+    n_env_iter = full_config["n_env_iter"]
 
     # =================== DEFINE MODEL ========================
     # =========================================================
-    model = BaseDoubleDQN(obs_space=env.observation_space,
-                          action_space=env.action_space,
-                          config=full_config["algo_params"],
-                          device=full_config["device"],
-                          writer=tf_logger
-                          )
 
-    print(env.observation_space)
+    if full_config["algo"] == "dqn":
+        model = BaseDoubleDQN(env=envs[0],
+                              config=full_config["algo_params"],
+                              device=full_config["device"],
+                              logger=tf_logger,
+                              visualizer=q_values_visualizer
+                              )
+    else:
+        model = PPOAlgo(envs=envs,
+                        config=full_config["algo_params"],
+                        logger=tf_logger,
+                        visualizer=q_values_visualizer,
+                        device=full_config["device"]
+                        )
+
+    print(envs[0].observation_space)
+
     # ================ TRAINING HERE ===============
-    # ==============================================
-    with display:
-        for episode_num in range(n_episodes):
-
-            done = False
-            obs = env.reset()
-            iter_this_ep = 0
-            reward_this_ep = 0
-            begin_ep_time = time.time()
-
-            while not done:
-                act, q_values = model.select_action(obs)
-                new_obs, reward, done, info = env.step(act)
-
-                iter_this_ep += 1
-                total_step += 1
-                reward_this_ep += reward
-
-                loss = model.optimize_model(state=obs,
-                                            action=act,
-                                            next_state=new_obs,
-                                            reward=reward,
-                                            done=done,
-                                            environment_step=total_step)
-
-                obs = new_obs
-
-                tf_logger.log("loss", loss)
-                tf_logger.log("max_q_val", max(q_values), operation='max')
-                tf_logger.log("min_q_val", min(q_values), operation='min')
-
-                # Dump tensorboard stats
-                tf_logger.dump(total_step=total_step)
-
-                # Dump image
-                image = q_values_generator.render_state_and_q_values(game=env, q_values=q_values, ep_num=episode_num)
-                if image is not None:
-                    tf_logger.add_image(tag="data/q_value_ep{}".format(episode_num),
-                                        img_tensor=image,
-                                        global_step=iter_this_ep,
-                                        dataformats="HWC")
-
-            # ============ END OF EP ==============
-            # =====================================
-            time_since_ep_start = time.time() - begin_ep_time
-
-            loss_mean = np.mean(tf_logger.variable_to_log['loss']['values'])
-            print("loss_mean {}".format(loss_mean))
-            print("End of ep #{} Time since begin ep : {:.2f}, Time per step : {:.2f} Total iter : {}  iter this ep : {} rewrd : {:.3f}".format(
-                episode_num, time_since_ep_start, time_since_ep_start / iter_this_ep, total_step, iter_this_ep, reward_this_ep))
-
-            tf_logger.log("n_iter_per_ep", iter_this_ep)
-            tf_logger.log("wrong_pick", int(iter_this_ep < env.unwrapped.max_steps and reward_this_ep == 0))
-            tf_logger.log("time_out", int(iter_this_ep >= env.unwrapped.max_steps))
-            tf_logger.log("reward", reward_this_ep)
-            tf_logger.log("epsilon", model.current_epsilon)
-
+    model.train(n_env_iter=n_env_iter, visualizer=q_values_visualizer)
 
 if __name__ == "__main__":
 

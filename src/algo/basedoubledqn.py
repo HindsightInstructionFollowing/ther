@@ -7,10 +7,12 @@ import torch.nn.functional as F
 from algo.neural_architecture import MinigridConv, MlpNet
 from algo.replay_buffer import ReplayMemory
 
+import time
+
 class BaseDoubleDQN(nn.Module):
 
     #def __init__(self, h, w, c, n_actions, frames, lr, num_token, device, use_memory, use_text):
-    def __init__(self, obs_space, action_space, config, device='cpu', writer=None):
+    def __init__(self, env, config, logger, visualizer, device='cpu'):
         """
         """
         super(BaseDoubleDQN, self).__init__()
@@ -20,8 +22,12 @@ class BaseDoubleDQN(nn.Module):
         else:
             nn_creator = MlpNet
 
-        self.policy_net = nn_creator(obs_space=obs_space, action_space=action_space, config=config["architecture_params"])
-        self.target_net = nn_creator(obs_space=obs_space, action_space=action_space, config=config["architecture_params"])
+        self.env = env
+        self.tf_logger = logger
+        self.q_values_visualizer = visualizer
+
+        self.policy_net = nn_creator(obs_space=env.observation_space, action_space=env.action_space, config=config["architecture_params"])
+        self.target_net = nn_creator(obs_space=env.observation_space, action_space=env.action_space, config=config["architecture_params"])
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
@@ -31,7 +37,7 @@ class BaseDoubleDQN(nn.Module):
 
         self.batch_size = config["batch_size"]
         self.gamma = config["gamma"]
-        self.n_actions = action_space.n
+        self.n_actions = env.action_space.n
 
         self.replay_buffer = ReplayMemory(size=config["replay_buffer_size"])
 
@@ -47,7 +53,7 @@ class BaseDoubleDQN(nn.Module):
         self.device = device
         self.to(self.device)
 
-        self.writer = writer
+        self.writer = logger
 
     def select_action(self, state):
 
@@ -59,7 +65,8 @@ class BaseDoubleDQN(nn.Module):
             q_values = [ 1 / self.n_actions for i in range(self.n_actions)]
         else:
             # max(1) for the dim, [1] for the indice, [0] for the value
-            q_values = self.policy_net(state).detach().cpu().numpy()[0]
+            q_values, v, _ = self.policy_net(state)
+            q_values = q_values.detach().cpu().numpy()[0]
             action = int(q_values.argmax())
 
         self.total_steps += 1
@@ -78,7 +85,7 @@ class BaseDoubleDQN(nn.Module):
                                           terminal=done)
 
     # Optimize the model
-    def optimize_model(self, state, action, next_state, reward, done, environment_step):
+    def optimize_model(self, state, action, next_state, reward, done):
 
         self.store_transitions(state=state["image"],
                                action=action,
@@ -121,10 +128,13 @@ class BaseDoubleDQN(nn.Module):
         # Double DQN
         if torch.sum(batch_terminal) != self.batch_size:
             # Selection of the action with the policy net
-            args_actions = self.policy_net(batch_next_state_non_terminal_dict).max(1)[1].reshape(-1, 1)
+            q_values, _, _ = self.policy_net(batch_next_state_non_terminal_dict)
+            q_values_next_state, _, _ = self.target_net(batch_next_state_non_terminal_dict)
+
+            args_actions = q_values.max(1)[1].reshape(-1, 1)
             targets[batch_terminal == 0] = targets[batch_terminal == 0] \
                                        + self.gamma \
-                                       * self.target_net(batch_next_state_non_terminal_dict).gather(1, args_actions).detach()
+                                       * q_values_next_state.gather(1, args_actions).detach()
 
         targets = targets.reshape(-1)
 
@@ -134,7 +144,8 @@ class BaseDoubleDQN(nn.Module):
             "mission": batch_mission,
             "mission_length": batch_mission_length
         }
-        predictions = self.policy_net(batch_curr_state_dict).gather(1, batch_action).view(-1)
+        predictions, _, _ = self.policy_net(batch_curr_state_dict)
+        predictions = predictions.gather(1, batch_action).view(-1)
 
         # Loss
         loss = F.smooth_l1_loss(predictions, targets)
@@ -154,7 +165,7 @@ class BaseDoubleDQN(nn.Module):
         # Do the gradient descent step
         self.optimizer.step()
 
-        if environment_step % self.update_target_every == 0:
+        if self.environment_step % self.update_target_every == 0:
             self.target_net.load_state_dict(self.policy_net.state_dict())
             self.n_update_target += 1
 
@@ -173,5 +184,76 @@ class BaseDoubleDQN(nn.Module):
         for param_name in self.old_parameters:
             assert torch.equal(self.new_parameters[param_name], self.old_parameters[param_name]),\
                 "param {} changed".format(param_name)
+
+
+    def train(self, n_env_iter, visualizer=None):
+
+        # todo Some gym self.env require a fake display
+        # display = Xvfb(width=100, height=100, colordepth=16)
+        display = open("empty_context.txt", 'w')
+
+        self.environment_step = 1
+        episode_num = 1
+
+        with display:
+            while self.environment_step < n_env_iter:
+
+                done = False
+                obs = self.env.reset()
+                iter_this_ep = 0
+                reward_this_ep = 0
+                begin_ep_time = time.time()
+
+                while not done:
+                    act, q_values = self.select_action(obs)
+                    new_obs, reward, done, info = self.env.step(act)
+
+                    iter_this_ep += 1
+                    self.environment_step += 1
+                    reward_this_ep += reward
+
+                    loss = self.optimize_model(state=obs,
+                                               action=act,
+                                               next_state=new_obs,
+                                               reward=reward,
+                                               done=done
+                                               )
+
+                    obs = new_obs
+
+                    self.tf_logger.log("loss", loss)
+                    self.tf_logger.log("max_q_val", max(q_values), operation='max')
+                    self.tf_logger.log("min_q_val", min(q_values), operation='min')
+
+                    # Dump tensorboard stats
+                    self.tf_logger.dump(total_step=self.environment_step)
+
+                    # Dump image
+                    image = self.q_values_visualizer.render_state_and_q_values(game=self.env, q_values=q_values,
+                                                                               ep_num=episode_num)
+                    if image is not None:
+                        self.tf_logger.add_image(tag="data/q_value_ep{}".format(episode_num),
+                                            img_tensor=image,
+                                            global_step=iter_this_ep,
+                                            dataformats="HWC")
+
+                # ============ END OF EP ==============
+                # =====================================
+                episode_num += 1
+                time_since_ep_start = time.time() - begin_ep_time
+
+                loss_mean = np.mean(self.tf_logger.variable_to_log['loss']['values'])
+                print("loss_mean {}".format(loss_mean))
+                print(
+                "End of ep #{} Time since begin ep : {:.2f}, Time per step : {:.2f} Total iter : {}  iter this ep : {} rewrd : {:.3f}".format(
+                    episode_num, time_since_ep_start, time_since_ep_start / iter_this_ep, self.environment_step, iter_this_ep,
+                    reward_this_ep))
+
+                self.tf_logger.log("n_iter_per_ep", iter_this_ep)
+                self.tf_logger.log("wrong_pick", int(iter_this_ep < self.env.unwrapped.max_steps and reward_this_ep == 0))
+                self.tf_logger.log("time_out", int(iter_this_ep >= self.env.unwrapped.max_steps))
+                self.tf_logger.log("reward", reward_this_ep)
+                self.tf_logger.log("epsilon", self.current_epsilon)
+
 
 
