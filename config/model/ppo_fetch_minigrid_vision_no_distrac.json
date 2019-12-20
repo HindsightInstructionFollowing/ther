@@ -1,5 +1,5 @@
 {
-  "name" : "minigridfetch_ppo_memory",
+  "name" : "minigridfetch_ppo_memory_vision_objective_no_distractor_bigger",
   "algo" : "ppo",
   "device" : "cuda",
 
@@ -11,13 +11,12 @@
     "architecture_params" : {
       "dueling_architecture" : false,
       "use_lstm_after_conv" : false,
-      "rnn_text_hidden_size" : 256,
+      "rnn_text_hidden_size" : 128,
       "fc_text_embedding_hidden" : 32,
       "last_hidden_fc_size" : 128,
-      "ignore_text" : false,
+      "ignore_text" : true,
       "use_memory" : true,
       "conv_layers_channel" : [25, 50, 75]
-
     },
 
     "n_parallel_env" : 12,
@@ -38,6 +37,7 @@
   },
 
   "wrappers_model" : [
+    {"name" : "VisionObjectiveWrapper", "params" :  {"with_distractor" : false}},
     {"name" : "RemoveUselessChannelWrapper", "params" : {}},
     {"name" : "RemoveUselessActionWrapper", "params" : {}},
     {"name" : "MinigridTorchWrapper", "params" : {"device" : "cuda"}}

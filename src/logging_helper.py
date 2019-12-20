@@ -32,6 +32,7 @@ class SweetLogger(SummaryWriter):
         file contains : data/reward_max = 10,  data/reward_mean = 5
         """
 
+        self.path_to_log = path_to_log
         super().__init__(path_to_log)
 
         # Each variable is a key
@@ -51,7 +52,11 @@ class SweetLogger(SummaryWriter):
             self.variable_to_log[key]['operation'] = operation if type(operation) is list else [operation]
 
     def dump(self, total_step):
-
+        """
+        Dump all tensorboard data in one pass, empty temporary storage
+        :param total_step:
+        :return:
+        """
         if total_step > self.next_dump_step:
             for variable_name, var_dict in self.variable_to_log.items():
                 for op in var_dict['operation']:
@@ -61,6 +66,9 @@ class SweetLogger(SummaryWriter):
 
             self.reset()
             self.next_dump_step += self.dump_step
+            return True
+        return False
+
 
 
     def reset(self):

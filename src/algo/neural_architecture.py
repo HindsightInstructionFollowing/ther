@@ -54,19 +54,21 @@ class MinigridConv(nn.Module, RecurrentACModel):
 
         self.lstm_after_conv = config["use_lstm_after_conv"]
         frames_conv_net = 1 if self.lstm_after_conv else self.frames
+
+        channel1, channel2, channel3 = config["conv_layers_channel"] if "conv_layers_channel" in config else [16,32,64]
         self.conv_net = nn.Sequential(
-            nn.Conv2d(c * frames_conv_net, 16, (2, 2)),
+            nn.Conv2d(c * frames_conv_net, channel1, (2, 2)),
             nn.ReLU(),
             nn.MaxPool2d((2, 2)),
-            nn.Conv2d(16, 32, (2, 2)),
+            nn.Conv2d(channel1, channel2, (2, 2)),
             nn.ReLU(),
-            nn.Conv2d(32, 64, (2, 2)),
+            nn.Conv2d(channel2, channel3, (2, 2)),
             nn.ReLU()
         )
 
         output_conv_h = ((h - 1) // 2 - 2)  # h-3 without maxpooling
         output_conv_w = ((w - 1) // 2 - 2)  # w-3 without maxpooling
-        self.size_after_conv = 64 * output_conv_h * output_conv_w
+        self.size_after_conv = channel3 * output_conv_h * output_conv_w
 
         # Encode each frame and then pass them through a rnn
         if self.lstm_after_conv:

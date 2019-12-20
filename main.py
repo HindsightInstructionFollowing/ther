@@ -3,8 +3,10 @@ import gym
 import numpy as np
 from algo.basedoubledqn import BaseDoubleDQN
 from algo.ppo import PPOAlgo
-from gym_minigrid.envs.fetch_attr import FetchAttrEnv
+from gym_minigrid.envs.fetch_attr import FetchAttrEnv, FetchAttrDictLoaded
 from gym_minigrid.wrappers import wrap_env_from_list
+
+from gym_minigrid.envs.relationnal import RelationnalFetch
 
 from image_helper import QValueVisualizer
 
@@ -12,7 +14,7 @@ from logging_helper import SweetLogger
 import time
 import os
 import shutil
-from xvfbwrapper import Xvfb
+#from xvfbwrapper import Xvfb
 
 from config import load_config
 import env_utils
@@ -40,6 +42,18 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test=None):
     # =====================================================
     if full_config["gym_name"]:
         env_creator = lambda : gym.make(full_config["gym_name"])
+    elif full_config["env_type"] == "relationnal":
+        env_params = full_config["env_params"]
+        env_creator = lambda : RelationnalFetch(size=env_params["size"],
+                                                numObjs=env_params["numObjs"],
+                                                missions_file_str=env_params["mission_dict_path"])
+
+    elif full_config["env_params"]["mission_dict_path"]:
+        env_params = full_config["env_params"]
+        env_creator = lambda: FetchAttrDictLoaded(size=env_params["size"],
+                                                  numObjs=env_params["numObjs"],
+                                                  dict_mission_str=full_config["mission_dict_path"]
+                                                  )
     else:
         env_params = full_config["env_params"]
         env_creator = lambda : FetchAttrEnv(size=env_params["size"],

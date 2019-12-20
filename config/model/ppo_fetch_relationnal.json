@@ -40,9 +40,9 @@
   "wrappers_model" : [
     {"name" : "RemoveUselessChannelWrapper", "params" : {}},
     {"name" : "RemoveUselessActionWrapper", "params" : {}},
+    {"name" : "DirectionWrapper", "params" : {}},
     {"name" : "MinigridTorchWrapper", "params" : {"device" : "cuda"}}
   ]
-
 }
 
 

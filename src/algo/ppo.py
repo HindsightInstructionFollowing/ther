@@ -8,6 +8,8 @@ from algo.neural_architecture import MinigridConv, MlpNet
 import time
 import numpy as np
 
+from os import path
+
 class PPOAlgo(BaseAlgo):
     """The Proximal Policy Optimization algorithm
     ([Schulman et al., 2015](https://arxiv.org/abs/1707.06347))."""
@@ -196,4 +198,9 @@ class PPOAlgo(BaseAlgo):
              num_update, num_frames,   fps,  mean_rew,              p_loss,             v_loss,         grad_norm , duration)
             print(str_)
 
-            self.tf_logger.dump(num_frames)
+            has_dumped = self.tf_logger.dump(num_frames)
+            if has_dumped:
+                torch.save(self.acmodel.state_dict(), path.join(self.tf_logger.path_to_log, 'weights.th'))
+
+
+
