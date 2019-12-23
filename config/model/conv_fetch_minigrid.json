@@ -16,8 +16,7 @@
       "last_hidden_fc_size" : 64,
       "dueling_architecture" : true,
       "learn_text" : true,
-      "use_memory" : false,
-      "use_her" : false
+      "use_memory" : false
     },
 
     "n_parallel_env" : 1,
@@ -27,7 +26,9 @@
     "gamma" : 0.99,
     "update_target_every" : 2000,
     "step_exploration" : 20000,
-    "weight_decay" : 0
+    "weight_decay" : 0,
+    "use_her" : false
+
   },
 
   "wrappers_model" : [

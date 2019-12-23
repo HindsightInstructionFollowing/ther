@@ -1,5 +1,5 @@
 {
-  "name" : "vizdoom_more_explo_longer_up",
+  "name" : "vizdoom_more_explo_target8000_no_her",
   "algo" : "dqn",
   "device" : "cuda",
 
@@ -21,7 +21,6 @@
       "conv_layers_size" : [8,4,4],
       "conv_layers_stride" : [4,2,1],
       "max_pool_layers" : [0,0,0]
-
     },
 
     "n_parallel_env" : 1,
@@ -31,7 +30,9 @@
     "gamma" : 0.99,
     "update_target_every" : 8000,
     "step_exploration" : 100000,
-    "weight_decay" : 1e-5
+    "weight_decay" : 1e-5,
+    "use_her" : false
+
   },
 
   "wrappers_model" : [
