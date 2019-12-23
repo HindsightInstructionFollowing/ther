@@ -3,6 +3,18 @@ import gym
 from dictlist import DictList
 import torch
 
+from vizdoom_utils import grounding_env
+
+class AttrDict(dict):
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+
+def create_doom_env(args):
+    env = grounding_env.GroundingEnv(args)
+    env.game_init()
+    return env
+
 def worker(conn, env):
     while True:
         cmd, data = conn.recv()

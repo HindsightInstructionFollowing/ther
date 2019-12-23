@@ -1,0 +1,53 @@
+[
+    {
+        "instruction": "Go to the short red object",
+        "targets": [
+            "ShortRedTorch",
+            "ShortRedColumn"
+        ],
+        "description": "short red object"
+    },
+    {
+        "instruction": "Go to the red torch",
+        "targets": [
+            "RedTorch",
+            "ShortRedTorch"
+        ],
+        "description": "red torch"
+    },
+    {
+        "instruction": "Go to the green torch",
+        "targets": [
+            "ShortGreenTorch",
+            "GreenTorch"
+        ],
+        "description": "green torch"
+    },
+    {
+        "instruction": "Go to the tall green torch",
+        "targets": [
+            "GreenTorch"
+        ],
+        "description": "tall green torch"
+    },
+    {
+        "instruction": "Go to the smallest green object",
+        "targets": [
+            "GreenArmor",
+            "TallGreenColumn",
+            "ShortGreenTorch",
+            "ShortGreenColumn",
+            "GreenTorch"
+        ],
+        "description": "smallest green object"
+    },
+    {
+        "instruction": "Go to the short torch",
+        "targets": [
+            "ShortRedTorch",
+            "ShortGreenTorch",
+            "ShortBlueTorch"
+        ],
+        "description": "short torch"
+    }
+]

@@ -6,6 +6,8 @@ import contextlib
 from algo.pg_base import RecurrentACModel, ACModel
 from torch.distributions.categorical import Categorical
 
+import numpy as np
+
 
 def init_weights(m):
     if type(m) == nn.Linear:
@@ -55,20 +57,39 @@ class MinigridConv(nn.Module, RecurrentACModel):
         self.lstm_after_conv = config["use_lstm_after_conv"]
         frames_conv_net = 1 if self.lstm_after_conv else self.frames
 
-        channel1, channel2, channel3 = config["conv_layers_channel"] if "conv_layers_channel" in config else [16,32,64]
-        self.conv_net = nn.Sequential(
-            nn.Conv2d(c * frames_conv_net, channel1, (2, 2)),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 2)),
-            nn.Conv2d(channel1, channel2, (2, 2)),
-            nn.ReLU(),
-            nn.Conv2d(channel2, channel3, (2, 2)),
-            nn.ReLU()
-        )
+        # xxxxx_list[0] correspond to the first conv layer, xxxxx_list[1] to the second etc ...
+        channel_list = config["conv_layers_channel"] if "conv_layers_channel" in config else [16,32,64]
+        kernel_list = config["conv_layers_size"] if "conv_layers_size" in config else [2,2,2]
+        stride_list = config["conv_layers_stride"] if "conv_layers_stride" in config else [1,1,1]
+        max_pool_list = config["max_pool_layers"] if "max_pool_layers" in config else [2,0,0]
 
-        output_conv_h = ((h - 1) // 2 - 2)  # h-3 without maxpooling
-        output_conv_w = ((w - 1) // 2 - 2)  # w-3 without maxpooling
-        self.size_after_conv = channel3 * output_conv_h * output_conv_w
+        last_layer_channel = c * frames_conv_net
+
+        self.conv_net = nn.Sequential()
+        for layer in range(len(channel_list)):
+            self.conv_net.add_module(name='conv{}'.format(layer),
+                                     module=nn.Conv2d(in_channels=last_layer_channel,
+                                                      out_channels=channel_list[layer],
+                                                      kernel_size=kernel_list[layer],
+                                                      stride=stride_list[layer])
+                                     )
+            self.conv_net.add_module(name='relu{}'.format(layer),
+                                     module=nn.ReLU()
+                                     )
+
+            # For next iter
+            last_layer_channel = channel_list[layer]
+
+            if max_pool_list[layer]:
+                self.conv_net.add_module(name='max_pool{}'.format(layer),
+                                         module=nn.MaxPool2d(kernel_size=max_pool_list[layer])
+                                         )
+
+
+        # output_conv_h = ((h - 1) // 2 - 2)  # h-3 without maxpooling
+        # output_conv_w = ((w - 1) // 2 - 2)  # w-3 without maxpooling
+        # self.size_after_conv = channel_list[-1] * output_conv_h * output_conv_w
+        self.size_after_conv = np.prod(self.conv_net(torch.zeros(1, *obs_space["image"].shape)).shape)
 
         # Encode each frame and then pass them through a rnn
         if self.lstm_after_conv:

@@ -250,7 +250,7 @@ class BaseDoubleDQN(nn.Module):
                     reward_this_ep))
 
                 self.tf_logger.log("n_iter_per_ep", iter_this_ep)
-                self.tf_logger.log("wrong_pick", int(iter_this_ep < self.env.unwrapped.max_steps and reward_this_ep == 0))
+                self.tf_logger.log("wrong_pick", int(iter_this_ep < self.env.unwrapped.max_steps and reward_this_ep <= 0))
                 self.tf_logger.log("time_out", int(iter_this_ep >= self.env.unwrapped.max_steps))
                 self.tf_logger.log("reward", reward_this_ep)
                 self.tf_logger.log("epsilon", self.current_epsilon)

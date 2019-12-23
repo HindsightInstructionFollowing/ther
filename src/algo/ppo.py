@@ -175,7 +175,9 @@ class PPOAlgo(BaseAlgo):
             update_start_time = time.time()
 
             exps, logs1 = self.collect_experiences()
+            print("Before up")
             logs2 = self.update_parameters(exps)
+            print("After up")
             logs = {**logs1, **logs2}
 
             num_frames += logs["num_frames"]
