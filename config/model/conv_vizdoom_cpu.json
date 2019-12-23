@@ -1,9 +1,9 @@
 {
-  "name" : "minigrid_fetch_default_dueling",
+  "name" : "vizdoom_more_explo_longer_up_cpu",
   "algo" : "dqn",
-  "device" : "cuda",
+  "device" : "cpu",
 
-  "dump_log_every" : 10000,
+  "dump_log_every" : 2000,
 
   "algo_params": {
 
@@ -17,7 +17,11 @@
       "dueling_architecture" : true,
       "learn_text" : true,
       "use_memory" : false,
-      "use_her" : false
+      "conv_layers_channel" : [25, 50, 75],
+      "conv_layers_size" : [8,4,4],
+      "conv_layers_stride" : [4,2,1],
+      "max_pool_layers" : [0,0,0]
+
     },
 
     "n_parallel_env" : 1,
@@ -25,15 +29,13 @@
     "lr" : 1e-5,
     "replay_buffer_size" : 40000,
     "gamma" : 0.99,
-    "update_target_every" : 2000,
-    "step_exploration" : 20000,
+    "update_target_every" : 8000,
+    "step_exploration" : 100000,
     "weight_decay" : 0
   },
 
   "wrappers_model" : [
-    {"name" : "RemoveUselessChannelWrapper", "params" : {}},
-    {"name" : "RemoveUselessActionWrapper", "params" : {}},
-    {"name" : "MinigridTorchWrapper", "params" : {"device" : "cuda"}}
+    {"name" : "MinigridTorchWrapper", "params" : {"device" : "cpu"}}
   ]
 
 }

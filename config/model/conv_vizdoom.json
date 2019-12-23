@@ -1,5 +1,5 @@
 {
-  "name" : "vizdoom_default",
+  "name" : "vizdoom_more_explo_longer_up",
   "algo" : "dqn",
   "device" : "cuda",
 
@@ -29,9 +29,9 @@
     "lr" : 1e-5,
     "replay_buffer_size" : 40000,
     "gamma" : 0.99,
-    "update_target_every" : 2000,
-    "step_exploration" : 20000,
-    "weight_decay" : 0
+    "update_target_every" : 8000,
+    "step_exploration" : 100000,
+    "weight_decay" : 1e-5
   },
 
   "wrappers_model" : [

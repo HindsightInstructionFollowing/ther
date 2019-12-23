@@ -40,6 +40,7 @@ class BaseDoubleDQN(nn.Module):
         self.n_actions = env.action_space.n
 
         self.replay_buffer = ReplayMemory(size=config["replay_buffer_size"])
+        self.use_her = config["use_her"]
 
         self.epsilon_init = 1
         self.epsilon_min = 0.04
