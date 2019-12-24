@@ -171,3 +171,4 @@ class PrioritizedReplayMemory(AbstractReplay):
 
     def erase_stored_transitions(self):
         self.stored_transitions = []
+

@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 
 from algo.pg_base import BaseAlgo
-from algo.neural_architecture import MinigridConv, MlpNet
+from algo.neural_architecture import MinigridConvPolicy, MlpNet
 
 import time
 import numpy as np
@@ -17,9 +17,9 @@ class PPOAlgo(BaseAlgo):
     def __init__(self, envs, config, logger, device, visualizer=None):
 
         if config["architecture"] == "conv":
-            acmodel = MinigridConv(obs_space=envs[0].observation_space,
-                                   action_space=envs[0].action_space,
-                                   config=config["architecture_params"])
+            acmodel = MinigridConvPolicy(obs_space=envs[0].observation_space,
+                                         action_space=envs[0].action_space,
+                                         config=config["architecture_params"])
         else:
             acmodel = MlpNet(obs_space=envs[0].observation_space,
                              action_space=envs[0].action_space,

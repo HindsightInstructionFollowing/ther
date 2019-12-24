@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from algo.neural_architecture import MinigridConv, MlpNet
+from algo.neural_architecture import MinigridConvPolicy, MlpNet
 from algo.replay_buffer import ReplayMemory
 
 import time
@@ -18,7 +18,7 @@ class BaseDoubleDQN(nn.Module):
         super(BaseDoubleDQN, self).__init__()
 
         if config["architecture"] == "conv":
-            nn_creator = MinigridConv
+            nn_creator = MinigridConvPolicy
         else:
             nn_creator = MlpNet
 
