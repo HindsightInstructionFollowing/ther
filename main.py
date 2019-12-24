@@ -16,13 +16,15 @@ from logging_helper import SweetLogger
 import time
 import os
 import shutil
-#from xvfbwrapper import Xvfb
 
 from config import load_config
 from env_utils import create_doom_env, AttrDict
 
+import xvfbwrapper
+
 def train(model_config, env_config, out_dir, seed, model_ext, local_test=None):
 
+    display = xvfbwrapper.Xvfb(width=128, height=128, colordepth=16)
     full_config, expe_path = load_config(model_config_file=model_config,
                                          model_ext_file=model_ext,
                                          env_config_file=env_config,
@@ -88,7 +90,7 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test=None):
                               config=full_config["algo_params"],
                               device=full_config["device"],
                               logger=tf_logger,
-                              visualizer=q_values_visualizer
+                              visualizer=q_values_visualizer,
                               )
     else:
         model = PPOAlgo(envs=envs,
@@ -101,7 +103,7 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test=None):
     print(envs[0].observation_space)
 
     # ================ TRAINING HERE ===============
-    model.train(n_env_iter=n_env_iter, visualizer=q_values_visualizer)
+    model.train(n_env_iter=n_env_iter, visualizer=q_values_visualizer, display=display)
 
 if __name__ == "__main__":
 

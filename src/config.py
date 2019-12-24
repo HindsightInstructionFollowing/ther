@@ -12,7 +12,6 @@ EXPE_DEFAULT_CONFIG = {
     "exp_dir": "default_out"
 }
 
-
 def override_config_recurs(config, config_extension):
     for key, value in config_extension.items():
         if type(value) is dict:

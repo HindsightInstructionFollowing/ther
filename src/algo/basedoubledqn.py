@@ -187,12 +187,11 @@ class BaseDoubleDQN(nn.Module):
                 "param {} changed".format(param_name)
 
 
-    def train(self, n_env_iter, visualizer=None):
+    def train(self, n_env_iter, visualizer=None, display=None):
 
         # todo Some gym self.env require a fake display
-        # display = Xvfb(width=100, height=100, colordepth=16)
-        display = open("empty_context.txt", 'w')
-
+        if not display:
+            display = open("empty_context.txt", 'w')
         self.environment_step = 1
         episode_num = 1
 

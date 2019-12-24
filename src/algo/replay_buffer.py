@@ -3,140 +3,89 @@ import operator
 import random
 import numpy as np
 
+from abc import ABC
+from abc import abstractmethod
 
-class AbstractReplay(object):
-    def __init__(self):
-        pass
-
-    def add_transition(self):
-        pass
-    def sample(self):
-        pass
-
-class ReplayMemory(object):
-    def __init__(self, size, seed=42):
+class AbstractReplay(ABC):
+    def __init__(self, size, seed, hindsight_reward):
         self.transition = collections.namedtuple("Transition",
                                                  ["curr_state", "action", "reward", "next_state", "terminal",
                                                   "mission", "mission_length"])
         self.stored_transitions = []
+        self.current_episode = []
+        self.hindsight_reward = hindsight_reward
+
         self.memory_size = int(size)
         self.memory = [None for _ in range(self.memory_size)]
-        self.position = 0
         self.len = 0
+        self.position = 0
         random.seed(seed)
 
-    def add_transition(self, curr_state, action, reward, next_state, terminal, mission, mission_length):
+    @abstractmethod
+    def add_transition(self, curr_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission):
+        pass
+    @abstractmethod
+    def sample(self):
+        pass
+    def update_weight(self):
+        pass
 
-        assert mission_length == mission.size(1), "Mission length doesn't match, 'mission_length' in state"
-        mission = mission[0]
-        self.memory[self.position] = self.transition(curr_state, action, reward, next_state, terminal, mission, mission_length)
-        # self.memory.append(self.transition(curr_state, action, reward, next_state, terminal, mission))
-        # if len(self.memory) > self.memory_size:
-        #    del self.memory[0]
+class ReplayMemory(AbstractReplay):
+    def __init__(self, size, seed, hindsight_reward):
+        super().__init__(self, size, seed, hindsight_reward)
 
-        # Update the position and the len of the memory size
-        self.position += 1
-        self.len = min(self.memory_size, self.len + 1)
-        if self.position > self.memory_size - 1:
-            self.position = 0
+    def add_transition(self, curr_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission=None):
+        """
+        Adds transition to an temporary episode buffer
+        When TERMINAL is reach, the episode is added to the replay buffer
+
+        This allows to switch mission and reward for the whole episode, if necessary.
+
+        If hindsight mission is provided (terminal == True is needed)
+        The current episode is stored alongside a new one with the substitued mission
+        """
+        # assert mission_length == mission.size(1), "Mission length doesn't match, 'mission_length' in state"
+        # mission = mission[0] if mission.shape[0] == 0 else mission
+
+        self.current_episode.append(
+            self.transition(curr_state, action, reward, next_state, terminal, mission, mission_length)
+        )
+
+        if hindsight_mission:
+            assert terminal is True, "If hindsight mission is provided, should be at the end of episode"
+
+            # Substitute the old mission with the new one, change the reward too
+            hindsight_episode = [self.transition(st, a, self.hindsight_reward, st_plus1, end_ep, hindsight_mission,
+                                                 len(hindsight_mission))
+                                 for st, a, r, st_plus1, end_ep, wrong_mission, length in self.current_episode
+                                 ]
+            self.store_episode(hindsight_episode)
+
+        if terminal:
+            self.store_episode(self.current_episode)
+            self.current_episode = []
 
     def sample(self, batch_size):
-        if self.len == self.memory_size:
-            return random.sample(self.memory, batch_size)
-        else:
-            return random.sample(self.memory[:self.len], batch_size)
+        return random.sample(self.memory, batch_size)
+
+    def store_episode(self, episode_to_store):
+
+        len_episode = len(episode_to_store)
+        if self.position + len_episode > self.memory_size:
+            self.position = 0
+
+        self.memory[self.position:self.position + len_episode] = episode_to_store
+
+        self.position += len_episode
+        self.len = min(self.memory_size, self.len + len_episode)
 
     def __len__(self):
         return self.len
 
-    def store_transition(self, curr_state, action, reward, next_state, terminal, mission):
-        raise NotImplementedError("This is suspicious")
-        self.stored_transitions.append(self.transition(curr_state, action, reward, next_state, terminal, mission))
-
-    def add_hindsight_transitions(self, reward, mission, keep_last_transitions):
-        # keep_last_transitions = 0 => keep the whole episode
-        if keep_last_transitions == 0:
-            keep = 0
-        elif keep_last_transitions > 0:
-            keep = max(len(self.stored_transitions) - keep_last_transitions, 0)
-        # Update the last transition with hindsight replay
-        self.memory[self.position] = self.stored_transitions[-1]._replace(reward=reward, mission=mission)
-        # Update the position and the len of the memory size
-        self.position += 1
-        self.len = min(self.memory_size, self.len + 1)
-        if self.position > self.memory_size - 1:
-            self.position = 0
-        # Update all the transitions of the current episode with hindsight replay
-        for transition in self.stored_transitions[keep:-1]:
-            self.memory[self.position] = transition._replace(mission=mission)
-            # Update the position and the len of the memory size
-            self.position += 1
-            self.len = min(self.memory_size, self.len + 1)
-            if self.position > self.memory_size - 1:
-                self.position = 0
-
-    def erase_stored_transitions(self):
-        self.stored_transitions = []
-
-    def add_dense_transitions(self, reward, mission, action, keep_last_transitions_dense):
-        # keep_last_transitions = 0 => keep the whole episode
-        if keep_last_transitions_dense == 0:
-            keep = 0
-        elif keep_last_transitions_dense > 0:
-            keep = max(len(self.stored_transitions) - keep_last_transitions_dense, 0)
-        # Update the last transition with hindsight replay
-        self.memory[self.position] = self.stored_transitions[-1]._replace(reward=reward, mission=mission,
-                                                                          action=action, terminal=True)
-        # Update the position and the len of the memory size
-        self.position += 1
-        self.len = min(self.memory_size, self.len + 1)
-        if self.position > self.memory_size - 1:
-            self.position = 0
-        # Update all the transitions of the current episode with hindsight replay
-        for transition in self.stored_transitions[keep:-1]:
-            self.memory[self.position] = transition._replace(mission=mission)
-            # Update the position and the len of the memory size
-            self.position += 1
-            self.len = min(self.memory_size, self.len + 1)
-            if self.position > self.memory_size - 1:
-                self.position = 0
-
-
-class ReplayMemoryExpert(object):
-    def __init__(self, size, seed):
-        self.imc = collections.namedtuple("imc", ["state", "target"])
-        self.memory_size = int(size)
-        self.position = 0
-        self.len = 0
-        self.memory = [None for _ in range(self.memory_size)]
-        self.episodes_done = 0
-        self.memory_dense_size = self.memory_size * 10
-        self.memory_dense = [None for _ in range(self.memory_dense_size)]
-        self.position_dense = 0
-        self.imc_dense = collections.namedtuple("dense", ["state", "target"])
-        self.len_dense = 0
-        self.stored_dense_data = []
-        random.seed(seed)
-        np.random.seed(seed)
-
-    def add_data(self, curr_state, target):
-        self.memory[self.position] = self.imc(curr_state, target)
-        # Update the position and the len of the memory size
-        self.position += 1
-        self.len = min(self.memory_dense_size, self.len + 1)
-        if self.position > self.memory_size - 1:
-            self.position = 0
-
-    def add_data_dense(self, curr_state, target):
-        self.memory_dense[self.position_dense] = self.imc_dense(curr_state, target)
-        self.position_dense += 1
-        self.len_dense = min(self.memory_dense_size, self.len_dense + 1)
-        if self.position_dense > self.memory_size * 10 - 1:
-            self.position_dense = 0
-
-
-class PrioritizedReplayMemory(object):
+class PrioritizedReplayMemory(AbstractReplay):
     def __init__(self, size, seed, alpha, beta, annealing_rate, eps=1e-6):
+        # todo : include per
+        raise NotImplementedError("Not available yet")
         self.transition = collections.namedtuple("Transition",
                                                  ["curr_state", "action", "reward", "next_state", "terminal",
                                                   "mission"])
