@@ -206,18 +206,20 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
     def semi_memory_size(self):
         return self.memory_lstm_size
 
-class MinigridConvGenerator(nn.Module):
-    def __init__(self, input_shape, n_output, vocabulary, config):
+class InstructionGenerator(nn.Module):
+    def __init__(self, input_shape, n_output, config):
         super().__init__()
 
-
-        self.vocabulary = vocabulary
-        self.final_token = self.vocabulary["END"]
+        # This is a convention, veryfied by the environment tokenizer, might be ugly
+        self.BEGIN_TOKEN = 0
+        self.END_TOKEN = 1
 
         channel_list = config["conv_layers_channel"]
         kernel_list = config["conv_layers_size"]
         stride_list = config["conv_layers_stride"]
         max_pool_list = config["max_pool_layers"]
+
+        self.teacher_forcing = config["teacher_forcing"]
 
         self.conv_net, size_after_conv = conv_factory(input_shape=input_shape,
                                                       channels=channel_list,
@@ -226,16 +228,18 @@ class MinigridConvGenerator(nn.Module):
                                                       max_pool=max_pool_list)
 
         self.word_embedder = nn.Embedding(num_embeddings=len(self.vocabulary), embedding_dim=config["embedding_dim"])
-        self.lstm_decoder = nn.LSTMCell(input_size=config["embedding_dim"], hidden_size=int(size_after_conv))
+        self.rnn_decoder = nn.GRUCell(input_size=config["embedding_dim"], hidden_size=int(size_after_conv))
         self.mlp_decoder = nn.Linear(in_features=config["lstm_hidden_size"], out_features=n_output)
 
-    def forward(self, input):
+    def forward(self, input, teacher_word=None):
         out = self.conv_net(input)
 
         is_last_word = False
         last_ht = out
+        next_input = self.word_embedder(torch.IntTensor([self.BEGIN_TOKEN]))
         while not is_last_word:
-            pass
+            last_ht = self.rnn_decoder(input=next_input, hx=last_ht)
+            softmax_token = F.softmax(self.mlp_decoder(last_ht[0]))
 
 
 
