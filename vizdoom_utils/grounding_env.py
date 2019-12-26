@@ -366,4 +366,6 @@ class GroundingEnv(gym.core.Env):
             for word in instruction.split(" "):
                 if word not in word_to_idx:
                     word_to_idx[word] = len(word_to_idx)
+
+        print("Vocabulary : ", word_to_idx)
         return word_to_idx

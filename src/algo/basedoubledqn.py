@@ -114,7 +114,10 @@ class BaseDoubleDQN(nn.Module):
         # for ind, mission in enumerate(batch_transitions.mission):
         #     text_length[ind] = mission.size(0)
         # batch_mission_length = torch.tensor(text_length, dtype=torch.long).to(self.device)
-        batch_mission = nn.utils.rnn.pad_sequence(batch_transitions.mission, batch_first=True).to(self.device)
+        batch_mission = nn.utils.rnn.pad_sequence(sequences=batch_transitions.mission,
+                                                  batch_first=True,
+                                                  padding_value=2 # Padding is always 2, checked by vocab
+                                                  ).to(self.device)
 
         # Compute targets according to the Bellman eq
         batch_next_state_non_terminal_dict = {
@@ -189,7 +192,6 @@ class BaseDoubleDQN(nn.Module):
 
     def train(self, n_env_iter, visualizer=None, display=None):
 
-        # todo Some gym self.env require a fake display
         if not display:
             display = open("empty_context.txt", 'w')
         self.environment_step = 1

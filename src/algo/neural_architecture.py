@@ -55,8 +55,8 @@ def conv_factory(input_shape, channels, kernels, strides, max_pool):
 
         if max_pool[layer]:
             conv_net.add_module(name='max_pool{}'.format(layer),
-                                     module=nn.MaxPool2d(kernel_size=max_pool[layer])
-                                     )
+                                module=nn.MaxPool2d(kernel_size=max_pool[layer])
+                                )
 
     size_after_conv = np.prod(conv_net(torch.zeros(1, input_shape)).shape)
     return conv_net, size_after_conv
@@ -80,7 +80,7 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
         self.width = w
 
         self.lstm_after_conv = config["use_lstm_after_conv"]
-        frames_conv_net = 1 if self.lstm_after_conv else self.frames
+        # frames_conv_net = 1 if self.lstm_after_conv else self.frames
 
         # xxxxx_list[0] correspond to the first conv layer, xxxxx_list[1] to the second etc ...
         channel_list = config["conv_layers_channel"] if "conv_layers_channel" in config else [16, 32, 64]
@@ -88,7 +88,11 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
         stride_list = config["conv_layers_stride"] if "conv_layers_stride" in config else [1, 1, 1]
         max_pool_list = config["max_pool_layers"] if "max_pool_layers" in config else [2, 0, 0]
 
-        self.conv_net, self.size_after_conv = conv_factory(channel_list, kernel_list, stride_list, max_pool_list)
+        self.conv_net, self.size_after_conv = conv_factory(input_shape=obs_space["image"].shape,
+                                                           channels=channel_list,
+                                                           kernels=kernel_list,
+                                                           strides=stride_list,
+                                                           max_pool=max_pool_list)
 
         # Encode each frame and then pass them through a rnn
         if self.lstm_after_conv:
@@ -202,6 +206,39 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
     def semi_memory_size(self):
         return self.memory_lstm_size
 
-class MinigridConvClassif(nn.Module):
-    def __init__(self, params):
-        super().__init__(self)
+class MinigridConvGenerator(nn.Module):
+    def __init__(self, input_shape, n_output, vocabulary, config):
+        super().__init__()
+
+
+        self.vocabulary = vocabulary
+        self.final_token = self.vocabulary["END"]
+
+        channel_list = config["conv_layers_channel"]
+        kernel_list = config["conv_layers_size"]
+        stride_list = config["conv_layers_stride"]
+        max_pool_list = config["max_pool_layers"]
+
+        self.conv_net, size_after_conv = conv_factory(input_shape=input_shape,
+                                                      channels=channel_list,
+                                                      kernels=kernel_list,
+                                                      strides=stride_list,
+                                                      max_pool=max_pool_list)
+
+        self.word_embedder = nn.Embedding(num_embeddings=len(self.vocabulary), embedding_dim=config["embedding_dim"])
+        self.lstm_decoder = nn.LSTMCell(input_size=config["embedding_dim"], hidden_size=int(size_after_conv))
+        self.mlp_decoder = nn.Linear(in_features=config["lstm_hidden_size"], out_features=n_output)
+
+    def forward(self, input):
+        out = self.conv_net(input)
+
+        is_last_word = False
+        last_ht = out
+        while not is_last_word:
+            pass
+
+
+
+
+
+
