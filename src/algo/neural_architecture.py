@@ -207,19 +207,21 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
         return self.memory_lstm_size
 
 class InstructionGenerator(nn.Module):
-    def __init__(self, input_shape, n_output, config):
+    def __init__(self, input_shape, n_output, config, device):
         super().__init__()
 
         # This is a convention, veryfied by the environment tokenizer, might be ugly
         self.BEGIN_TOKEN = 0
         self.END_TOKEN = 1
 
+        self.device = device
+
         channel_list = config["conv_layers_channel"]
         kernel_list = config["conv_layers_size"]
         stride_list = config["conv_layers_stride"]
         max_pool_list = config["max_pool_layers"]
 
-        self.teacher_forcing = config["teacher_forcing"]
+        self.teacher_forcing_ratio = config["teacher_forcing"]
 
         self.conv_net, size_after_conv = conv_factory(input_shape=input_shape,
                                                       channels=channel_list,
@@ -231,17 +233,52 @@ class InstructionGenerator(nn.Module):
         self.rnn_decoder = nn.GRUCell(input_size=config["embedding_dim"], hidden_size=int(size_after_conv))
         self.mlp_decoder = nn.Linear(in_features=config["lstm_hidden_size"], out_features=n_output)
 
-    def forward(self, input, teacher_word=None):
+    def forward(self, input, teacher_sentence):
+
+        batch_size = input.size(0)
+        out = self.conv_net(input)
+
+        last_ht = out
+        next_tokens = torch.empty(batch_size, 1).fill_(self.BEGIN_TOKEN).long().to(self.device)
+        softmax_token_list = []
+        for word_num in range(teacher_sentence.size(1)):
+            next_input = self.word_embedder(next_tokens)
+            last_ht = self.rnn_decoder(input=next_input, hx=last_ht)
+            softmax_token = F.softmax(self.mlp_decoder(last_ht[0]))
+            softmax_token_list.append(softmax_token)
+
+            # If teacher force => input word is used as next token for rnn
+            if np.random.random() < self.teacher_forcing_ratio:
+                next_tokens = input[:, word_num]
+            else: # no teacher force : use last generated token as input for next rnn iteration
+                _, next_tokens = torch.max(softmax_token, dim=1)
+
+        all_predictions = torch.cat(softmax_token_list)
+        return all_predictions
+
+    def generate(self, input):
+
+        batch_size = input.size(0)
+        assert batch_size == 1, "While generating, input should have a batch size of 1 is {}".format(batch_size)
+
         out = self.conv_net(input)
 
         is_last_word = False
         last_ht = out
-        next_input = self.word_embedder(torch.IntTensor([self.BEGIN_TOKEN]))
+        next_token = torch.empty(batch_size, 1).fill_(self.BEGIN_TOKEN).long().to(self.device)
+
+        generated_token = []
         while not is_last_word:
+            next_input = self.word_embedder(next_token)
             last_ht = self.rnn_decoder(input=next_input, hx=last_ht)
             softmax_token = F.softmax(self.mlp_decoder(last_ht[0]))
+            _, next_token = torch.max(softmax_token, axis=1)
+            generated_token.append(next_token.item())
 
+            if next_token == self.END_TOKEN:
+                is_last_word = True
 
+        return torch.cat(generated_token)
 
 
 

@@ -7,68 +7,20 @@ from abc import ABC
 from abc import abstractmethod
 
 class AbstractReplay(ABC):
-    def __init__(self, size, seed, hindsight_reward):
+    def __init__(self, config):
         self.transition = collections.namedtuple("Transition",
-                                                 ["curr_state", "action", "reward", "next_state", "terminal",
+                                                 ["current_state", "action", "reward", "next_state", "terminal",
                                                   "mission", "mission_length"])
         self.stored_transitions = []
         self.current_episode = []
-        self.hindsight_reward = hindsight_reward
+        self.hindsight_reward = config["hindsight_reward"]
 
-        self.memory_size = int(size)
+        self.memory_size = int(config["size"])
         self.memory = [None for _ in range(self.memory_size)]
         self.len = 0
         self.position = 0
-        random.seed(seed)
 
-    @abstractmethod
-    def add_transition(self, curr_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission):
-        pass
-    @abstractmethod
-    def sample(self):
-        pass
-    def update_weight(self):
-        pass
-
-class ReplayMemory(AbstractReplay):
-    def __init__(self, size, seed, hindsight_reward):
-        super().__init__(self, size, seed, hindsight_reward)
-
-    def add_transition(self, curr_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission=None):
-        """
-        Adds transition to an temporary episode buffer
-        When TERMINAL is reach, the episode is added to the replay buffer
-
-        This allows to switch mission and reward for the whole episode, if necessary.
-
-        If hindsight mission is provided (terminal == True is needed)
-        The current episode is stored alongside a new one with the substitued mission
-        """
-        # assert mission_length == mission.size(1), "Mission length doesn't match, 'mission_length' in state"
-        # mission = mission[0] if mission.shape[0] == 0 else mission
-
-        self.current_episode.append(
-            self.transition(curr_state, action, reward, next_state, terminal, mission, mission_length)
-        )
-
-        if hindsight_mission:
-            assert terminal is True, "If hindsight mission is provided, should be at the end of episode"
-
-            # Substitute the old mission with the new one, change the reward too
-            hindsight_episode = [self.transition(st, a, self.hindsight_reward, st_plus1, end_ep, hindsight_mission,
-                                                 len(hindsight_mission))
-                                 for st, a, r, st_plus1, end_ep, wrong_mission, length in self.current_episode
-                                 ]
-            self.store_episode(hindsight_episode)
-
-        if terminal:
-            self.store_episode(self.current_episode)
-            self.current_episode = []
-
-    def sample(self, batch_size):
-        return random.sample(self.memory, batch_size)
-
-    def store_episode(self, episode_to_store):
+    def _store_episode(self, episode_to_store):
 
         len_episode = len(episode_to_store)
         if self.position + len_episode > self.memory_size:
@@ -82,12 +34,60 @@ class ReplayMemory(AbstractReplay):
     def __len__(self):
         return self.len
 
+    @abstractmethod
+    def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission):
+        pass # todo : remove mission_length, can be computed on the fly instead of moving it around
+    @abstractmethod
+    def sample(self, batch_size):
+        pass
+    def update_transitions_proba(self):
+        pass
+
+class ReplayMemory(AbstractReplay):
+    def __init__(self, config):
+        super().__init__(self, config)
+
+    def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission=None):
+        """
+        Adds transition to an temporary episode buffer
+        When TERMINAL is reach, the episode is added to the replay buffer
+
+        This allows to switch mission and reward for the whole episode, if necessary.
+
+        If hindsight mission is provided (terminal == True is needed)
+        The current episode is stored alongside a new one with the substitued mission
+        """
+        # assert mission_length == mission.size(1), "Mission length doesn't match, 'mission_length' in state"
+        # mission = mission[0] if mission.shape[0] == 0 else mission
+
+        self.current_episode.append(
+            self.transition(current_state, action, reward, next_state, terminal, mission, mission_length)
+        )
+
+        if hindsight_mission:
+            assert terminal is True, "If hindsight mission is provided, should be at the end of episode, terminal == False"
+            assert reward <= 0, "Hindsight mission should be provided only if objective failed. Reward : {}".format(reward)
+
+            # Substitute the old mission with the new one, change the reward too
+            hindsight_episode = [self.transition(st, a, self.hindsight_reward, st_plus1, end_ep, hindsight_mission,
+                                                 len(hindsight_mission))
+                                 for st, a, wrong_reward, st_plus1, end_ep, wrong_mission, length in self.current_episode
+                                 ]
+            self._store_episode(hindsight_episode)
+
+        if terminal:
+            self._store_episode(self.current_episode)
+            self.current_episode = []
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
 class PrioritizedReplayMemory(AbstractReplay):
     def __init__(self, size, seed, alpha, beta, annealing_rate, eps=1e-6):
         # todo : include per
         raise NotImplementedError("Not available yet")
         self.transition = collections.namedtuple("Transition",
-                                                 ["curr_state", "action", "reward", "next_state", "terminal",
+                                                 ["current_state", "action", "reward", "next_state", "terminal",
                                                   "mission"])
         self.memory_size = int(size)
         self.memory = [None for _ in range(self.memory_size)]
@@ -106,9 +106,9 @@ class PrioritizedReplayMemory(AbstractReplay):
         np.random.seed(seed)
         self.stored_transitions = []
 
-    def add_transition(self, curr_state, action, reward, next_state, terminal, mission):
+    def add_transition(self, current_state, action, reward, next_state, terminal, mission):
         self.memory[self.position] = \
-            self.transition(curr_state=curr_state, action=action, reward=reward, next_state=next_state,
+            self.transition(current_state=current_state, action=action, reward=reward, next_state=next_state,
                             terminal=terminal, mission=mission)
         # Add the maximal priority
         if self.len == 0:
@@ -142,8 +142,8 @@ class PrioritizedReplayMemory(AbstractReplay):
 
         return self.len
 
-    def store_transition(self, curr_state, action, reward, next_state, terminal, mission):
-        self.stored_transitions.append(self.transition(curr_state, action, reward, next_state, terminal, mission))
+    def store_transition(self, current_state, action, reward, next_state, terminal, mission):
+        self.stored_transitions.append(self.transition(current_state, action, reward, next_state, terminal, mission))
 
     def add_hindsight_transitions(self, reward, mission, keep_last_transitions):
         # keep_last_transitions = 0 => keep the whole episode
