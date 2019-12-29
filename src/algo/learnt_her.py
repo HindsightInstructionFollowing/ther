@@ -1,15 +1,14 @@
 from algo.replay_buffer import AbstractReplay
-from algo.neural_architecture import InstructionGenerator
+from algo.neural_architecture import InstructionGenerator, compute_accuracy
 import numpy as np
 import torch
 import torch.nn.functional as F
 
 class LearntHindsightExperienceReplay(AbstractReplay):
-    def __init__(self, input_shape, n_output, config, device, logger):
+    def __init__(self, input_shape, n_output, config, device, logger=None):
         super().__init__(config)
 
         config = config["ther_params"]
-
         self.instruction_generator = InstructionGenerator(input_shape=input_shape,
                                                           n_output=n_output,
                                                           config=config["architecture_params"],
@@ -19,7 +18,13 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         self.update_steps =                    set(config["update_steps"])
         self.n_sample_before_using_generator = config["n_sample_before_using_generator"]
         self.batch_size =                      config["batch_size"]
-        self.loss =                            F.cross_entropy
+        self.padding_value =                   2 # By convention, checked by Word2Idx in wrappers.py
+
+        # Loss and optimization
+        self.loss =      F.cross_entropy
+        self.optimizer = torch.optim.Adam(params=self.instruction_generator.parameters(),
+                                          lr=config["lr"], weight_decay=config["weight_decay"])
+
 
         # Init generator dataset, device and logger
         self.device = device
@@ -70,16 +75,89 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         convergence = False
         len_dataset = len(self.generator_dataset["states"])
         # To speed batching, convert list to tensor
-        states, lengths = torch.cat(self.generator_dataset['states']), torch.LongTensor(self.generator_dataset['lengths'])
-        instructions = torch.nn.utils.rnn.pad_sequence(sequences=self.generator_dataset["instructions"],
+        states = torch.cat(self.generator_dataset['states'])
+        lengths = self.generator_dataset['lengths']
+        instructions = self.generator_dataset["instructions"]
+        instructions, lengths = zip(*sorted(zip(instructions, lengths),
+                                            key=lambda x: -x[0].size(0)))
+
+        lengths = torch.LongTensor(lengths)
+
+        # for i in range(len(self.generator_dataset)):
+        #     assert len(self.generator_dataset['instructions'][i]) == self.generator_dataset['lengths'][i]
+        # print("Lengths are okay!")
+
+
+        instructions = torch.nn.utils.rnn.pad_sequence(sequences=instructions,
                                                        batch_first=True,
-                                                       padding_value=2  # Padding is always 2, checked by vocab
-                                                       ) # check ordering is kept
+                                                       padding_value=self.padding_value
+                                                       )
 
         while not convergence:
             batch_idx = np.random.choice(range(len_dataset), self.batch_size)
             batch_state, batch_lengths = states[batch_idx].to(self.device), lengths[batch_idx].to(self.device)
             batch_instruction = instructions[batch_idx].to(self.device)
 
-            softmaxes = self.instruction_generator(batch_state, batch_instruction, batch_lengths)
+            logits = self.instruction_generator(batch_state, batch_instruction, batch_lengths)
 
+            # Turn instructions into labels for the generator
+            instruction_label = batch_instruction[:,1:] # Remove <BEG> token
+
+            if lengths.max().item() in batch_lengths:
+                instruction_label = torch.cat((instruction_label, torch.ones(self.batch_size, 1).fill_(self.padding_value).long()), dim=1)
+            elif torch.all(batch_lengths == lengths.min().item()):
+                instruction_label = instruction_label[:,:-1]
+
+            instruction_label = instruction_label.reshape(-1)
+
+            # Compute only index where no padding token is being predicted
+            assert instruction_label.size(0) == logits.size(0), \
+                "instruction {} logits {}, lengths {}".format(instruction_label.size(), logits.size(), lengths)
+            indexes = np.where(instruction_label != self.padding_value)
+            logits = logits[indexes]
+            instruction_label = instruction_label[indexes]
+
+            accuracy = compute_accuracy(logits, instruction_label)
+
+            # Last round of test
+            assert logits.requires_grad is True
+            assert instruction_label.requires_grad is False
+            assert instruction_label.size(0) == logits.size(0)
+
+            loss = self.loss(input=logits, target=instruction_label)
+
+            print(loss, accuracy)
+
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+
+
+if __name__ == "__main__":
+    import pickle as pkl
+
+    input_shape = (4,7,7)
+    n_output = 27
+    config = {
+        "hindsight_reward" : 0.8,
+        "use_her" : False,
+        "size" : 40000,
+        "ther_params": {
+            "lr": 3e-4,
+            "batch_size": 5,
+            "weight_decay": 0,
+            "update_steps": [10, 300, 1000],
+            "n_sample_before_using_generator": 300,
+
+            "architecture_params": {
+                "conv_layers_channel": [16, 32, 64],
+                "conv_layers_size": [2, 2, 2],
+                "conv_layers_stride": [1, 1, 1],
+                "max_pool_layers": [2, 0, 0],
+                "embedding_dim": 32
+            }
+        }}
+
+    replay = LearntHindsightExperienceReplay(input_shape, n_output, config, 'cpu')
+    replay.generator_dataset = pkl.load(open("gen_dataset.pkl", "rb"))
+    replay._train_generator()

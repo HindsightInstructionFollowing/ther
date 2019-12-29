@@ -8,7 +8,6 @@ from torch.distributions.categorical import Categorical
 
 import numpy as np
 
-
 def init_weights(m):
     if type(m) == nn.Linear:
         torch.nn.init.xavier_uniform_(m.weight)
@@ -16,6 +15,13 @@ def init_weights(m):
     elif type(m) == nn.Conv2d:
         torch.nn.init.xavier_normal_(m.weight, gain=.1)
         m.bias.data.fill_(0.01)
+
+def compute_accuracy(logits, labels):
+
+    predicted_token = logits.argmax(dim=1)
+    accuracy = (predicted_token == labels).sum()
+    accuracy = float(accuracy.item())
+    return accuracy / labels.size(0)
 
 
 class MlpNet(nn.Module):
@@ -221,7 +227,6 @@ class InstructionGenerator(nn.Module):
         self.BEGIN_TOKEN = 0
         self.END_TOKEN = 1
 
-        #
         self.vocabulary_size = n_output
 
         channel_list = config["conv_layers_channel"]
@@ -248,14 +253,33 @@ class InstructionGenerator(nn.Module):
         :return: a tensor of instruction predicted by the network of size (batch_size * n_word_per_sequence, n_token)
         """
 
-        batch_size = states.size(0) # Many things to check
-        out = self.conv_net(states)
+        import copy
+        batch_size = teacher_sentence.size(0)
+        max_length = lengths.max().item()
 
-        embedded_begin = self.word_embedder(teacher_sentence)
-        ht, _ = self.rnn_decoder(embedded_begin) # check size to convert to nn
+        conv_ht = self.conv_net(states)
+        conv_ht = conv_ht.view(batch_size, -1)
 
+        # Remove the last <pad> token as it's not useful to predict
+        # teacher_sentence_cut = teacher_sentence[:, :-1]
+        # lengths_reduced = lengths - 1
 
-        return all_predictions
+        embedded_sentences = self.word_embedder(teacher_sentence)
+        packed_embedded = torch.nn.utils.rnn.pack_padded_sequence(input=embedded_sentences,
+                                                                  lengths=lengths,
+                                                                  batch_first=True, enforce_sorted=False)
+
+        # hx size is (num_layers*num_directions, batch_size, hidden_size), 1 layer and 1 direction in this architecture
+        conv_ht = conv_ht.unsqueeze(0) # Adding num_layer*directions dimension
+
+        # Compute all ht in a forward pass, teacher_forcing 100% of the time
+        ht, _ = self.rnn_decoder(input=packed_embedded, hx=conv_ht)
+        ht, _ = torch.nn.utils.rnn.pad_packed_sequence(ht, batch_first=True) # Unpack sequence
+        view_ht = ht.view(batch_size*max_length, -1)
+        assert view_ht.size(1) == conv_ht.size(2)
+
+        logits = self.mlp_decoder(input=view_ht)
+        return logits
 
     def generate(self, input):
 
