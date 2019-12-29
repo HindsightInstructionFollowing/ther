@@ -36,7 +36,7 @@ class MlpNet(nn.Module):
         return self.fc3(out)
 
 def conv_factory(input_shape, channels, kernels, strides, max_pool):
-    assert input_shape.dim() == 3, "shape should be 3 dimensionnal"
+    assert len(input_shape) == 3, "shape should be 3 dimensionnal"
     conv_net = nn.Sequential()
     last_layer_channel = input_shape[0]
     for layer in range(len(channels)):
@@ -58,7 +58,7 @@ def conv_factory(input_shape, channels, kernels, strides, max_pool):
                                 module=nn.MaxPool2d(kernel_size=max_pool[layer])
                                 )
 
-    size_after_conv = np.prod(conv_net(torch.zeros(1, input_shape)).shape)
+    size_after_conv = np.prod(conv_net(torch.zeros(1, *input_shape)).shape)
     return conv_net, size_after_conv
 
 class MinigridConvPolicy(nn.Module, RecurrentACModel):
@@ -208,20 +208,29 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
 
 class InstructionGenerator(nn.Module):
     def __init__(self, input_shape, n_output, config, device):
+        """
+        Basic instruction generator
+        Convert state (or trajectory) to an instruction in approximate english (not very sophisticated litterature, sorry)
+
+
+        """
         super().__init__()
+        self.device = device
 
         # This is a convention, veryfied by the environment tokenizer, might be ugly
         self.BEGIN_TOKEN = 0
         self.END_TOKEN = 1
 
-        self.device = device
+        #
+        self.vocabulary_size = n_output
 
         channel_list = config["conv_layers_channel"]
         kernel_list = config["conv_layers_size"]
         stride_list = config["conv_layers_stride"]
         max_pool_list = config["max_pool_layers"]
 
-        self.teacher_forcing_ratio = config["teacher_forcing"]
+        # Not being used at the moment
+        # self.teacher_forcing_ratio = config["teacher_forcing"]
 
         self.conv_net, size_after_conv = conv_factory(input_shape=input_shape,
                                                       channels=channel_list,
@@ -229,31 +238,23 @@ class InstructionGenerator(nn.Module):
                                                       strides=stride_list,
                                                       max_pool=max_pool_list)
 
-        self.word_embedder = nn.Embedding(num_embeddings=len(self.vocabulary), embedding_dim=config["embedding_dim"])
-        self.rnn_decoder = nn.GRUCell(input_size=config["embedding_dim"], hidden_size=int(size_after_conv))
-        self.mlp_decoder = nn.Linear(in_features=config["lstm_hidden_size"], out_features=n_output)
+        self.word_embedder = nn.Embedding(num_embeddings=self.vocabulary_size, embedding_dim=config["embedding_dim"])
+        self.rnn_decoder = nn.GRU(input_size=config["embedding_dim"], hidden_size=int(size_after_conv), batch_first=True)
+        self.mlp_decoder = nn.Linear(in_features=int(size_after_conv), out_features=n_output)
 
-    def forward(self, input, teacher_sentence):
+    def forward(self, states, teacher_sentence, lengths):
+        """
+        Takes states and instruction pairs
+        :return: a tensor of instruction predicted by the network of size (batch_size * n_word_per_sequence, n_token)
+        """
 
-        batch_size = input.size(0)
-        out = self.conv_net(input)
+        batch_size = states.size(0) # Many things to check
+        out = self.conv_net(states)
 
-        last_ht = out
-        next_tokens = torch.empty(batch_size, 1).fill_(self.BEGIN_TOKEN).long().to(self.device)
-        softmax_token_list = []
-        for word_num in range(teacher_sentence.size(1)):
-            next_input = self.word_embedder(next_tokens)
-            last_ht = self.rnn_decoder(input=next_input, hx=last_ht)
-            softmax_token = F.softmax(self.mlp_decoder(last_ht[0]))
-            softmax_token_list.append(softmax_token)
+        embedded_begin = self.word_embedder(teacher_sentence)
+        ht, _ = self.rnn_decoder(embedded_begin) # check size to convert to nn
 
-            # If teacher force => input word is used as next token for rnn
-            if np.random.random() < self.teacher_forcing_ratio:
-                next_tokens = input[:, word_num]
-            else: # no teacher force : use last generated token as input for next rnn iteration
-                _, next_tokens = torch.max(softmax_token, dim=1)
 
-        all_predictions = torch.cat(softmax_token_list)
         return all_predictions
 
     def generate(self, input):

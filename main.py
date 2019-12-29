@@ -20,16 +20,32 @@ import shutil
 from config import load_config
 from env_utils import create_doom_env, AttrDict
 
-import xvfbwrapper
 
-def train(model_config, env_config, out_dir, seed, model_ext, local_test=None):
+def train(model_config, env_config, out_dir, seed, model_ext, local_test):
 
-    display = xvfbwrapper.Xvfb(width=128, height=128, colordepth=16)
+    # =================== CONFIGURATION==================
+    # ===================================================
     full_config, expe_path = load_config(model_config_file=model_config,
                                          model_ext_file=model_ext,
                                          env_config_file=env_config,
                                          out_dir=out_dir,
                                          seed=seed)
+
+    # Setting up context, when using a headless server, xvfbwrapper might be necessary
+    if not local_test:
+        import xvfbwrapper
+        display = xvfbwrapper.Xvfb(width=128, height=128, colordepth=16)
+    else:
+        display = open("empty_context.txt", "r")
+
+        # Override GPU context, switch to CPU on local machine
+        full_config["device"] = 'cpu'
+        wrapper_gpu = {"name": "MinigridTorchWrapper", "params": {"device": "cuda"}}
+        if "wrappers_model" in full_config:
+            if wrapper_gpu in full_config["wrappers_model"]:
+                index_wrapper = full_config["wrappers_model"].index(wrapper_gpu)
+                full_config["wrappers_model"][index_wrapper] = {"name": "MinigridTorchWrapper", "params": {"device": "cpu"}}
+
 
     # =================== LOGGING =======================
     # ===================================================
@@ -117,7 +133,7 @@ if __name__ == "__main__":
     parser.add_argument("-model_ext", type=str)
     parser.add_argument("-exp_dir", type=str, default="out", help="Directory all results")
     parser.add_argument("-seed", type=int, default=42, help="Random seed used")
-    #parser.add_argument("-local_test", type=bool, default=False, help="If env is run on my PC or a headless server")
+    parser.add_argument("-local_test", type=bool, default=False, help="If env is run on my PC or a headless server")
 
     args = parser.parse_args()
 
@@ -126,5 +142,6 @@ if __name__ == "__main__":
           model_config=args.model_config,
           model_ext=args.model_ext,
           out_dir=args.exp_dir,
-          seed=args.seed
+          seed=args.seed,
+          local_test=args.local_test
           )

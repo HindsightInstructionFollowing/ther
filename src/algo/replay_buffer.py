@@ -8,20 +8,29 @@ from abc import abstractmethod
 
 class AbstractReplay(ABC):
     def __init__(self, config):
+        """
+        All replay buffers are based on the same strategy, making hindsight and Prioritized Replay MUCH EASIER
+
+        Sample are added to a temporary episode buffer
+        When DONE is reach, the episode is added to the replay replay alongside a new one if HER is used
+        """
         self.transition = collections.namedtuple("Transition",
                                                  ["current_state", "action", "reward", "next_state", "terminal",
                                                   "mission", "mission_length"])
         self.stored_transitions = []
         self.current_episode = []
         self.hindsight_reward = config["hindsight_reward"]
+        self.use_her = config["use_her"]
 
         self.memory_size = int(config["size"])
         self.memory = [None for _ in range(self.memory_size)]
         self.len = 0
         self.position = 0
 
-    def _store_episode(self, episode_to_store):
+    def sample(self, batch_size):
+        return random.sample(self.memory[:self.len], batch_size)
 
+    def _store_episode(self, episode_to_store):
         len_episode = len(episode_to_store)
         if self.position + len_episode > self.memory_size:
             self.position = 0
@@ -31,21 +40,19 @@ class AbstractReplay(ABC):
         self.position += len_episode
         self.len = min(self.memory_size, self.len + len_episode)
 
+    def update_transitions_proba(self):
+        pass
     def __len__(self):
         return self.len
 
     @abstractmethod
-    def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission):
-        pass # todo : remove mission_length, can be computed on the fly instead of moving it around
-    @abstractmethod
-    def sample(self, batch_size):
-        pass
-    def update_transitions_proba(self):
-        pass
+    def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length,
+                       hindsight_mission):
+        pass  # todo : remove mission_length, can be computed on the fly instead of moving it around
 
 class ReplayMemory(AbstractReplay):
     def __init__(self, config):
-        super().__init__(self, config)
+        super().__init__(config)
 
     def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission=None):
         """
@@ -64,7 +71,7 @@ class ReplayMemory(AbstractReplay):
             self.transition(current_state, action, reward, next_state, terminal, mission, mission_length)
         )
 
-        if hindsight_mission:
+        if hindsight_mission and self.use_her:
             assert terminal is True, "If hindsight mission is provided, should be at the end of episode, terminal == False"
             assert reward <= 0, "Hindsight mission should be provided only if objective failed. Reward : {}".format(reward)
 
@@ -79,8 +86,7 @@ class ReplayMemory(AbstractReplay):
             self._store_episode(self.current_episode)
             self.current_episode = []
 
-    def sample(self, batch_size):
-        return random.sample(self.memory, batch_size)
+
 
 class PrioritizedReplayMemory(AbstractReplay):
     def __init__(self, size, seed, alpha, beta, annealing_rate, eps=1e-6):

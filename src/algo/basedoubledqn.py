@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 from algo.neural_architecture import MinigridConvPolicy, MlpNet
 from algo.replay_buffer import ReplayMemory
+from algo.learnt_her import LearntHindsightExperienceReplay
 
 import time
 
@@ -39,8 +40,19 @@ class BaseDoubleDQN(nn.Module):
         self.gamma = config["gamma"]
         self.n_actions = env.action_space.n
 
-        self.replay_buffer = ReplayMemory(size=config["replay_buffer_size"])
-        self.use_her = config["use_her"]
+        # Create replay buffer here
+        if config["experience_replay_config"]["use_ther"]:
+            input_shape = env.observation_space["image"].shape[-3:] # todo : input shape check, because of framestacking etc...
+            vocabulary_size = int(env.observation_space["mission"].high.max())
+            replay_buffer = LearntHindsightExperienceReplay(input_shape=input_shape,
+                                                            n_output=vocabulary_size,
+                                                            config=config["experience_replay_config"],
+                                                            device=device,
+                                                            logger=logger
+                                                            )
+        else:
+            replay_buffer = ReplayMemory(config=config["experience_replay_config"])
+        self.replay_buffer = replay_buffer
 
         self.epsilon_init = 1
         self.epsilon_min = 0.04
@@ -76,25 +88,17 @@ class BaseDoubleDQN(nn.Module):
     def end_of_episode(self, n_episodes):
         pass
 
-    def store_transitions(self, state, action, next_state, reward, done, mission, mission_length=None, use_hindsight=False):
-        self.replay_buffer.add_transition(curr_state=state.cpu(),
-                                          action=action,
-                                          reward=reward,
-                                          next_state=next_state.cpu(),
-                                          mission=mission.cpu(),
-                                          mission_length=mission_length.cpu(),
-                                          terminal=done)
-
     # Optimize the model
     def optimize_model(self, state, action, next_state, reward, done):
 
-        self.store_transitions(state=state["image"],
-                               action=action,
-                               next_state=next_state["image"],
-                               reward=reward,
-                               mission=next_state["mission"],
-                               mission_length=next_state["mission_length"],
-                               done=done)
+        self.replay_buffer.add_transition(current_state=state["image"].cpu(),
+                                          action=action,
+                                          next_state=next_state["image"].cpu(),
+                                          reward=reward,
+                                          mission=next_state["mission"][0].cpu(),
+                                          mission_length=next_state["mission_length"].cpu(),
+                                          terminal=done,
+                                          hindsight_mission=state["hindsight_mission"] if "hindsight_mission" in state else None)
 
         if len(self.replay_buffer) < self.batch_size:
             return 0
@@ -104,17 +108,19 @@ class BaseDoubleDQN(nn.Module):
         # Batch the transitions into one namedtuple
 
         batch_transitions = self.replay_buffer.transition(*zip(*transitions))
-        batch_curr_state = torch.cat(batch_transitions.curr_state).to(device=self.device)
+        batch_curr_state = torch.cat(batch_transitions.current_state).to(device=self.device)
         batch_next_state = torch.cat(batch_transitions.next_state).to(device=self.device)
         batch_terminal = torch.as_tensor(batch_transitions.terminal, dtype=torch.int32, device=self.device)
         batch_action = torch.as_tensor(batch_transitions.action, dtype=torch.long, device=self.device).reshape(-1, 1)
-        batch_mission_length = torch.cat(batch_transitions.mission_length)
+        batch_mission_length = torch.LongTensor(batch_transitions.mission_length)
 
         # text_length = [None] * self.batch_size
         # for ind, mission in enumerate(batch_transitions.mission):
         #     text_length[ind] = mission.size(0)
         # batch_mission_length = torch.tensor(text_length, dtype=torch.long).to(self.device)
-        batch_mission = nn.utils.rnn.pad_sequence(sequences=batch_transitions.mission,
+        batch_mission = list(batch_transitions.mission)
+        batch_mission.sort(key=lambda x : - x.size(0))
+        batch_mission = nn.utils.rnn.pad_sequence(sequences=batch_mission,
                                                   batch_first=True,
                                                   padding_value=2 # Padding is always 2, checked by vocab
                                                   ).to(self.device)

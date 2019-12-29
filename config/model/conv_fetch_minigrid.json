@@ -1,12 +1,11 @@
 {
-  "name" : "minigrid_fetch_default_dueling",
+  "name" : "minigrid_fetch_dueling_double_dqn",
   "algo" : "dqn",
   "device" : "cuda",
 
   "dump_log_every" : 10000,
 
   "algo_params": {
-
     "architecture" : "conv",
     "architecture_params" : {
       "ignore_text" : false,
@@ -19,16 +18,37 @@
       "use_memory" : false
     },
 
+    "experience_replay_config" : {
+      "hindsight_reward" : 0.8,
+      "size" : 40000,
+      "use_her" : false,
+      "prioritize" : false,
+      "use_ther" : false,
+      "ther_params" : {
+        "lr" : 3e-4,
+        "batch_size" : 64,
+        "weight_decay" : 1e-4,
+        "update_steps": [100,300,1000],
+        "n_sample_before_using_generator" : 300,
+
+        "architecture_params": {
+          "conv_layers_channel" : [16,32,64],
+          "conv_layers_size" : [2,2,2],
+          "conv_layers_stride" : [1,1,1],
+          "max_pool_layers" : [2,0,0],
+          "embedding_dim" : 32
+
+        }
+      }
+    },
+
     "n_parallel_env" : 1,
     "batch_size" : 128,
     "lr" : 1e-5,
-    "replay_buffer_size" : 40000,
     "gamma" : 0.99,
     "update_target_every" : 2000,
     "step_exploration" : 20000,
-    "weight_decay" : 0,
-    "use_her" : false
-
+    "weight_decay" : 0
   },
 
   "wrappers_model" : [
