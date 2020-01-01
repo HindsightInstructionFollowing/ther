@@ -91,6 +91,7 @@ class BaseDoubleDQN(nn.Module):
     # Optimize the model
     def optimize_model(self, state, action, next_state, reward, done):
 
+        hindsight_mission = next_state["hindsight_mission"] if "hindsight_mission" in next_state else None
         self.replay_buffer.add_transition(current_state=state["image"].cpu(),
                                           action=action,
                                           next_state=next_state["image"].cpu(),
@@ -98,13 +99,17 @@ class BaseDoubleDQN(nn.Module):
                                           mission=next_state["mission"][0].cpu(),
                                           mission_length=next_state["mission_length"].cpu(),
                                           terminal=done,
-                                          hindsight_mission=state["hindsight_mission"] if "hindsight_mission" in state else None)
+                                          hindsight_mission=hindsight_mission)
 
         if len(self.replay_buffer) < self.batch_size:
             return 0
 
         # Sample from the memory replay
         transitions = self.replay_buffer.sample(self.batch_size)
+
+        # Sort transitions by missions length (for packing and padding)
+        transitions = sorted(transitions,
+                             key=lambda x: -x.mission.size(0))
 
         # Batch the transitions into one namedtuple
         batch_transitions = self.replay_buffer.transition(*zip(*transitions))
@@ -114,17 +119,9 @@ class BaseDoubleDQN(nn.Module):
         batch_next_state = torch.cat(batch_transitions.next_state).to(device=self.device)
         batch_terminal = torch.as_tensor(batch_transitions.terminal, dtype=torch.int32, device=self.device)
         batch_action = torch.as_tensor(batch_transitions.action, dtype=torch.long, device=self.device).reshape(-1, 1)
+        batch_mission_length = torch.cat(batch_transitions.mission_length).to(self.device)
 
-        # Batch mission is trickier because missions are of inconsistent length
-        batch_mission_length = batch_transitions.mission_length
-        batch_mission = list(batch_transitions.mission)
-
-        # Sort mission and length at the same time
-        batch_mission, batch_mission_length = zip(*sorted(zip(batch_mission, batch_mission_length),
-                                                          key=lambda x: -x[0].size(0)))
-
-        batch_mission_length = torch.LongTensor(batch_mission_length)
-        batch_mission = nn.utils.rnn.pad_sequence(sequences=batch_mission,
+        batch_mission = nn.utils.rnn.pad_sequence(sequences=batch_transitions.mission,
                                                   batch_first=True,
                                                   padding_value=2 # Padding is always 2, checked by vocab
                                                   ).to(self.device)

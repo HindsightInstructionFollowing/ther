@@ -44,7 +44,7 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test):
         if "wrappers_model" in full_config:
             if wrapper_gpu in full_config["wrappers_model"]:
                 index_wrapper = full_config["wrappers_model"].index(wrapper_gpu)
-                full_config["wrappers_model"][index_wrapper] = {"name": "MinigridTorchWrapper", "params": {"device": "cpu"}}
+                full_config["wrappers_modrel"][index_wrapper] = {"name": "MinigridTorchWrapper", "params": {"device": "cpu"}}
 
 
     # =================== LOGGING =======================

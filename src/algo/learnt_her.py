@@ -56,8 +56,8 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                 hindsight_mission = self.instruction_generator.generate(last_state) # check last state represents what you want
 
                 # Substitute the old mission with the new one, change the reward too
-                hindsight_episode = [self.transition(st, a, self.hindsight_reward, st_plus1, end_ep, hindsight_mission, len(hindsight_mission))
-                                                 for st, a, wrong_reward,          st_plus1, end_ep, wrong_mission,     length in self.current_episode]
+                hindsight_episode = [self.transition(st, a, self.hindsight_reward if end_ep else 0, st_plus1, end_ep, hindsight_mission, len(hindsight_mission))
+                                                 for st, a,            wrong_reward,                st_plus1, end_ep, wrong_mission,     length in self.current_episode]
 
                 self._store_episode(hindsight_episode)
 
@@ -103,6 +103,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             # Turn instructions into labels for the generator
             instruction_label = batch_instruction[:,1:] # Remove <BEG> token
 
+            # todo : ugly hotfix, remove
             if lengths.max().item() in batch_lengths:
                 instruction_label = torch.cat((instruction_label, torch.ones(self.batch_size, 1).fill_(self.padding_value).long()), dim=1)
             elif torch.all(batch_lengths == lengths.min().item()):

@@ -1,8 +1,11 @@
 {
-  "name" : "cheated_her",
+  "name" : "cheated_her_hindsight1",
 
   "algo_params": {
-      "use_her" : true
+    "experience_replay_config" : {
+      "use_her" : true,
+      "hindsight_reward" : 1
     }
+  }
 }
 

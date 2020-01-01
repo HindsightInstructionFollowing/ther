@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_fetch_dueling_double_dqn",
+  "name" : "minigrid_fetch_dueling_double_dqn_default",
   "algo" : "dqn",
   "device" : "cuda",
 
@@ -19,7 +19,7 @@
     },
 
     "experience_replay_config" : {
-      "hindsight_reward" : 0.8,
+      "hindsight_reward" : 1,
       "size" : 40000,
       "use_her" : false,
       "prioritize" : false,
