@@ -1,5 +1,5 @@
 {
-  "name" : "ther_test8",
+  "name" : "ther_test9",
   "algo_params": {
 
     "experience_replay_config" : {
@@ -8,7 +8,7 @@
         "lr" : 3e-4,
         "batch_size" : 5,
         "weight_decay" : 0,
-        "update_steps": [10,300,1000],
+        "update_steps": [30,300,1000],
         "n_sample_before_using_generator" : 300,
 
         "architecture_params": {

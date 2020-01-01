@@ -34,7 +34,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
     def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission=None):
         self.current_episode.append(
-            self.transition(current_state, action, reward, next_state, terminal, mission, mission.size(0))
+            self.transition(current_state, action, reward, next_state, terminal, mission, torch.LongTensor([mission.size(0)]))
         )
 
         # Number of sample in the generator dataset
@@ -55,10 +55,14 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                 # todo : in the long run, should take the whole trajectory as input
                 hindsight_mission = self.instruction_generator.generate(last_state) # check last state represents what you want
 
-                # Substitute the old mission with the new one, change the reward too
-                hindsight_episode = [self.transition(st, a, self.hindsight_reward if end_ep else 0, st_plus1, end_ep, hindsight_mission, len(hindsight_mission))
-                                                 for st, a,            wrong_reward,                st_plus1, end_ep, wrong_mission,     length in self.current_episode]
-
+                # Substitute the old mission with the new one, change the reward at the end of episode
+                hindsight_episode = []
+                for st, a, wrong_reward, st_plus1, end_ep, wrong_mission, length in self.current_episode:
+                    hindsight_reward = self.hindsight_reward if end_ep else 0
+                    len_mission = torch.LongTensor([len(hindsight_mission)])
+                    hindsight_episode.append(
+                        self.transition(st, a, hindsight_reward, st_plus1, end_ep, hindsight_mission, len_mission)
+                    )
                 self._store_episode(hindsight_episode)
 
             # If the agent succeeded, store the state/instruction pair to train the generator
@@ -82,12 +86,6 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                                             key=lambda x: -x[0].size(0)))
 
         lengths = torch.LongTensor(lengths)
-
-        # for i in range(len(self.generator_dataset)):
-        #     assert len(self.generator_dataset['instructions'][i]) == self.generator_dataset['lengths'][i]
-        # print("Lengths are okay!")
-
-
         instructions = torch.nn.utils.rnn.pad_sequence(sequences=instructions,
                                                        batch_first=True,
                                                        padding_value=self.padding_value
@@ -95,6 +93,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
         while not convergence:
             batch_idx = np.random.choice(range(len_dataset), self.batch_size)
+            batch_idx = np.array([0]*self.batch_size)
             batch_state, batch_lengths = states[batch_idx].to(self.device), lengths[batch_idx].to(self.device)
             batch_instruction = instructions[batch_idx].to(self.device)
 
@@ -103,17 +102,25 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             # Turn instructions into labels for the generator
             instruction_label = batch_instruction[:,1:] # Remove <BEG> token
 
-            # todo : ugly hotfix, remove
-            if lengths.max().item() in batch_lengths:
+            # Pack padded sequence in .forward remove entire columns if last column is filled with <pad>
+            # So we need to adjust the labels so the number of logits and label matches
+            max_length = lengths.max().item()
+            # If the last element of the longer sequence is <END> we need to add a <PAD> token to label size matches output size
+            if max_length in batch_lengths:
                 instruction_label = torch.cat((instruction_label, torch.ones(self.batch_size, 1).fill_(self.padding_value).long()), dim=1)
-            elif torch.all(batch_lengths == lengths.min().item()):
-                instruction_label = instruction_label[:,:-1]
+            else:
+                # If all sequences are filled with <PAD> at the end, they will not be computed by generator,
+                # So we also remove them from labels
+                current_max_length = batch_lengths.max().item()
+                id_to_remove = max_length - current_max_length - 1
+                if id_to_remove >= 1:
+                    instruction_label = instruction_label[:,:-id_to_remove]
 
             instruction_label = instruction_label.reshape(-1)
 
             # Compute only index where no padding token is being predicted
             assert instruction_label.size(0) == logits.size(0), \
-                "instruction {} logits {}, lengths {}".format(instruction_label.size(), logits.size(), lengths)
+                "instruction {} logits {}, lengths {}".format(instruction_label.size(), logits.size(), batch_lengths)
             indexes = np.where(instruction_label != self.padding_value)
             logits = logits[indexes]
             instruction_label = instruction_label[indexes]
@@ -145,9 +152,9 @@ if __name__ == "__main__":
         "size" : 40000,
         "ther_params": {
             "lr": 3e-4,
-            "batch_size": 5,
+            "batch_size": 4,
             "weight_decay": 0,
-            "update_steps": [10, 300, 1000],
+            "update_steps": [30, 300, 1000],
             "n_sample_before_using_generator": 300,
 
             "architecture_params": {

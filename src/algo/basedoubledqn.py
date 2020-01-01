@@ -185,6 +185,7 @@ class BaseDoubleDQN(nn.Module):
         #     self.new_parameters[k] = v.cpu()
         # self.check_weigths_change()
 
+        # Log important info, see logging_helper => SweetLogger for more details
         if self.writer:
             self.writer.log("percent_terminal", batch_terminal.sum().item()/self.batch_size)
             self.writer.log("n_update_target", self.n_update_target)
