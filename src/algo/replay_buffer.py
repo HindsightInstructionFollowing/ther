@@ -95,3 +95,27 @@ class ReplayMemory(AbstractReplay):
         if terminal:
             self._store_episode(self.current_episode)
             self.current_episode = []
+
+class RecurrentReplayBuffer(ReplayMemory):
+    def __init__(self, config):
+        super().__init__(config=config)
+
+    def _store_episode(self, episode_to_store):
+        """
+        Recurrent buffer stores episode by episode instead of a flat representation
+        """
+        len_episode = len(episode_to_store)
+        # If episode is too long, start cycling through buffer again
+        if self.position + len_episode > self.memory_size:
+            self.position = 0
+            assert len_episode < self.memory_size, \
+                "Problem, buffer not large enough, memory_size {}, len_episode {}".format(self.memory_size, len_episode)
+        # If new episode makes the buffer a bit longer, new length is defined
+        elif self.position + len_episode >= self.len:
+            self.len = self.position + len_episode
+
+        self.memory[self.position:self.position + len_episode] = episode_to_store
+        self.position += len_episode
+
+    def sample(self, batch_size):
+        pass

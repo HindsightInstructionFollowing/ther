@@ -228,6 +228,7 @@ class InstructionGenerator(nn.Module):
         self.END_TOKEN = 1
 
         self.vocabulary_size = n_output
+        self.generator_max_len = config["generator_max_len"]
 
         channel_list = config["conv_layers_channel"]
         kernel_list = config["conv_layers_size"]
@@ -289,21 +290,23 @@ class InstructionGenerator(nn.Module):
         out = self.conv_net(input)
 
         is_last_word = False
-        last_ht = out
+        last_ht = out.view(1, 1, -1)
         next_token = torch.empty(batch_size, 1).fill_(self.BEGIN_TOKEN).long().to(self.device)
 
         generated_token = []
         while not is_last_word:
             next_input = self.word_embedder(next_token)
-            last_ht = self.rnn_decoder(input=next_input, hx=last_ht)
-            softmax_token = F.softmax(self.mlp_decoder(last_ht[0]))
-            _, next_token = torch.max(softmax_token, axis=1)
+            _, last_ht = self.rnn_decoder(input=next_input, hx=last_ht)
+            softmax_token = F.softmax(self.mlp_decoder(last_ht.view(1, -1)), dim=1)
+            _, next_token = torch.max(softmax_token, dim=1)
             generated_token.append(next_token.item())
 
-            if next_token == self.END_TOKEN:
+            if next_token == self.END_TOKEN or len(generated_token) > self.generator_max_len:
                 is_last_word = True
 
-        return torch.cat(generated_token)
+            next_token = next_token.unsqueeze(0)
+
+        return torch.LongTensor(generated_token)
 
 
 

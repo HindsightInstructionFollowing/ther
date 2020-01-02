@@ -5,6 +5,7 @@
     "experience_replay_config" : {
       "use_ther" : true,
       "ther_params" : {
+        "accuracy_convergence" : 0.9,
         "lr" : 3e-4,
         "batch_size" : 5,
         "weight_decay" : 0,
@@ -16,7 +17,8 @@
           "conv_layers_size" : [2,2,2],
           "conv_layers_stride" : [1,1,1],
           "max_pool_layers" : [2,0,0],
-          "embedding_dim" : 32
+          "embedding_dim" : 32,
+          "generator_max_len" : 10
         }
       }
     }

@@ -18,7 +18,9 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         self.update_steps =                    set(config["update_steps"])
         self.n_sample_before_using_generator = config["n_sample_before_using_generator"]
         self.batch_size =                      config["batch_size"]
+        self.accuracy_convergence =            config["accuracy_convergence"] # Accuracy before generator is considered good
         self.padding_value =                   2 # By convention, checked by Word2Idx in wrappers.py
+        self.n_update_generator =              0
 
         # Loss and optimization
         self.loss =      F.cross_entropy
@@ -77,6 +79,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
     def _train_generator(self):
 
         convergence = False
+        accuracies = []
         len_dataset = len(self.generator_dataset["states"])
         # To speed batching, convert list to tensor
         states = torch.cat(self.generator_dataset['states'])
@@ -93,7 +96,6 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
         while not convergence:
             batch_idx = np.random.choice(range(len_dataset), self.batch_size)
-            batch_idx = np.array([0]*self.batch_size)
             batch_state, batch_lengths = states[batch_idx].to(self.device), lengths[batch_idx].to(self.device)
             batch_instruction = instructions[batch_idx].to(self.device)
 
@@ -105,9 +107,10 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             # Pack padded sequence in .forward remove entire columns if last column is filled with <pad>
             # So we need to adjust the labels so the number of logits and label matches
             max_length = lengths.max().item()
-            # If the last element of the longer sequence is <END> we need to add a <PAD> token to label size matches output size
+            # If the last element of the longer sequence is <END> we need to add a <PAD> token.
+            # Label size must matches output size
             if max_length in batch_lengths:
-                instruction_label = torch.cat((instruction_label, torch.ones(self.batch_size, 1).fill_(self.padding_value).long()), dim=1)
+                instruction_label = torch.cat((instruction_label, torch.ones(self.batch_size, 1).fill_(self.padding_value).long().to(self.device)), dim=1)
             else:
                 # If all sequences are filled with <PAD> at the end, they will not be computed by generator,
                 # So we also remove them from labels
@@ -121,28 +124,42 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             # Compute only index where no padding token is being predicted
             assert instruction_label.size(0) == logits.size(0), \
                 "instruction {} logits {}, lengths {}".format(instruction_label.size(), logits.size(), batch_lengths)
-            indexes = np.where(instruction_label != self.padding_value)
+            indexes = torch.where(instruction_label != self.padding_value)
             logits = logits[indexes]
             instruction_label = instruction_label[indexes]
 
             accuracy = compute_accuracy(logits, instruction_label)
+            accuracies.append(accuracy)
 
-            # Last round of test
+            # Last round of test, check gradients and size
             assert logits.requires_grad is True
             assert instruction_label.requires_grad is False
             assert instruction_label.size(0) == logits.size(0)
 
             loss = self.loss(input=logits, target=instruction_label)
 
-            print(loss, accuracy)
-
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
 
+            if self.logger:
+                self.logger.add_scalar("data/generator_loss", loss.detach().item(), self.n_update_generator)
+                self.logger.add_scalar("data/generator_accuracy", accuracy, self.n_update_generator)
+
+            self.n_update_generator += 1
+            if np.mean(accuracies[-10:]) > self.accuracy_convergence:
+                convergence = True
+
+        print("Done training generator in {} steps\nLast accuracies : {}".format(self.n_update_generator, accuracies[-10:]))
+
 
 if __name__ == "__main__":
     import pickle as pkl
+    import random
+    import json
+
+    vocab = json.load(open("gym-minigrid/gym_minigrid/envs/missions/vocab_fetch.json", "r"))
+    i2w = list(vocab["vocabulary"].keys())
 
     input_shape = (4,7,7)
     n_output = 27
@@ -151,6 +168,7 @@ if __name__ == "__main__":
         "use_her" : False,
         "size" : 40000,
         "ther_params": {
+            "accuracy_convergence": 0.95,
             "lr": 3e-4,
             "batch_size": 4,
             "weight_decay": 0,
@@ -162,10 +180,22 @@ if __name__ == "__main__":
                 "conv_layers_size": [2, 2, 2],
                 "conv_layers_stride": [1, 1, 1],
                 "max_pool_layers": [2, 0, 0],
-                "embedding_dim": 32
+                "embedding_dim": 32,
+                "generator_max_len": 10
             }
         }}
 
     replay = LearntHindsightExperienceReplay(input_shape, n_output, config, 'cpu')
     replay.generator_dataset = pkl.load(open("gen_dataset.pkl", "rb"))
     replay._train_generator()
+
+    while True:
+        state = random.choice(replay.generator_dataset["states"])
+        instruction = replay.instruction_generator.generate(state)
+
+        print(state)
+        raw_instruction = []
+        for word in instruction:
+            raw_instruction.append(i2w[word])
+        print(raw_instruction)
+        input()
