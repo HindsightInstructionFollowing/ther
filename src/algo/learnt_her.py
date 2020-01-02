@@ -124,7 +124,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             # Compute only index where no padding token is being predicted
             assert instruction_label.size(0) == logits.size(0), \
                 "instruction {} logits {}, lengths {}".format(instruction_label.size(), logits.size(), batch_lengths)
-            indexes = torch.where(instruction_label != self.padding_value)
+            indexes = np.where(instruction_label.cpu() != self.padding_value)
             logits = logits[indexes]
             instruction_label = instruction_label[indexes]
 
