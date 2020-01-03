@@ -4,22 +4,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from algo.neural_architecture import MinigridConvPolicy, MlpNet
-from algo.replay_buffer import ReplayMemory
+from algo.neural_architecture import MinigridConvPolicy, MlpNet, MinigridRecurrentPolicy
+from algo.replay_buffer import ReplayMemory, RecurrentReplayBuffer
 from algo.learnt_her import LearntHindsightExperienceReplay
 
 import time
 
 class BaseDoubleDQN(nn.Module):
 
-    #def __init__(self, h, w, c, n_actions, frames, lr, num_token, device, use_memory, use_text):
     def __init__(self, env, config, logger, visualizer, device='cpu'):
-        """
-        """
         super(BaseDoubleDQN, self).__init__()
 
         if config["architecture"] == "conv":
             nn_creator = MinigridConvPolicy
+        elif config["architecture"] == "conv_lstm":
+            nn_creator = MinigridRecurrentPolicy
         else:
             nn_creator = MlpNet
 
@@ -27,8 +26,8 @@ class BaseDoubleDQN(nn.Module):
         self.tf_logger = logger
         self.q_values_visualizer = visualizer
 
-        self.policy_net = nn_creator(obs_space=env.observation_space, action_space=env.action_space, config=config["architecture_params"])
-        self.target_net = nn_creator(obs_space=env.observation_space, action_space=env.action_space, config=config["architecture_params"])
+        self.policy_net = nn_creator(obs_space=env.observation_space, action_space=env.action_space, config=config["architecture_params"], device=device)
+        self.target_net = nn_creator(obs_space=env.observation_space, action_space=env.action_space, config=config["architecture_params"], device=device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
@@ -50,8 +49,14 @@ class BaseDoubleDQN(nn.Module):
                                                             device=device,
                                                             logger=logger
                                                             )
+
+            assert config["architecture"] != "conv_lstm", "Recurrent THER not available at the moment, sorry !"
+
+        elif config["architecture"] == "conv_lstm":
+            replay_buffer = RecurrentReplayBuffer(config=config["experience_replay_config"])
         else:
             replay_buffer = ReplayMemory(config=config["experience_replay_config"])
+
         self.replay_buffer = replay_buffer
 
         self.epsilon_init = 1
@@ -68,7 +73,7 @@ class BaseDoubleDQN(nn.Module):
 
         self.writer = logger
 
-    def select_action(self, state):
+    def select_action(self, state, ht=None):
 
         self.current_epsilon = max(self.epsilon_init - self.total_steps * (self.epsilon_init - self.epsilon_min)
                                    / self.step_exploration, self.epsilon_min)
@@ -77,13 +82,13 @@ class BaseDoubleDQN(nn.Module):
             action = random.choice(range(self.n_actions))
             q_values = [ 1 / self.n_actions for i in range(self.n_actions)]
         else:
-            # max(1) for the dim, [1] for the indice, [0] for the value
             q_values, v, _ = self.policy_net(state)
             q_values = q_values.detach().cpu().numpy()[0]
             action = int(q_values.argmax())
 
         self.total_steps += 1
-        return action, q_values
+        new_ht = None
+        return action, q_values, new_ht
 
     def end_of_episode(self, n_episodes):
         pass
@@ -213,9 +218,10 @@ class BaseDoubleDQN(nn.Module):
                 iter_this_ep = 0
                 reward_this_ep = 0
                 begin_ep_time = time.time()
+                ht = None
 
                 while not done:
-                    act, q_values = self.select_action(obs)
+                    act, q_values, ht = self.select_action(obs, ht)
                     new_obs, reward, done, info = self.env.step(act)
 
                     iter_this_ep += 1

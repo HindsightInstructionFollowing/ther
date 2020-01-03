@@ -2,6 +2,7 @@
 import gym
 import numpy as np
 from algo.basedoubledqn import BaseDoubleDQN
+from algo.recurrent_dqn import RecurrentDQN
 from algo.ppo import PPOAlgo
 from gym_minigrid.envs.fetch_attr import FetchAttrEnv, FetchAttrDictLoaded
 from gym_minigrid.wrappers import wrap_env_from_list
@@ -56,7 +57,7 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test):
     # When do you want to store images of q-function and corresponding state ?
     # Specify here :
     q_values_visualizer = QValueVisualizer(proba_log=full_config["q_visualizer_proba_log"],
-                                          ep_num_to_log=full_config["q_visualizer_ep_num_to_log"])
+                                           ep_num_to_log=full_config["q_visualizer_ep_num_to_log"])
 
     # =================== LOADING ENV =====================
     # =====================================================
@@ -108,6 +109,13 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test):
                               logger=tf_logger,
                               visualizer=q_values_visualizer,
                               )
+    elif full_config["algo"] == "rdqn":
+        model = RecurrentDQN(env=envs[0],
+                             config=full_config["algo_params"],
+                             device=full_config["device"],
+                             logger=tf_logger,
+                             visualizer=q_values_visualizer,
+                             )
     else:
         model = PPOAlgo(envs=envs,
                         config=full_config["algo_params"],

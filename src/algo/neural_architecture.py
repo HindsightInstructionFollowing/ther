@@ -25,7 +25,7 @@ def compute_accuracy(logits, labels):
 
 
 class MlpNet(nn.Module):
-    def __init__(self, obs_space, action_space, config):
+    def __init__(self, obs_space, action_space, config, device):
         super().__init__()
         n_hidden = 20
 
@@ -64,11 +64,115 @@ def conv_factory(input_shape, channels, kernels, strides, max_pool):
                                 module=nn.MaxPool2d(kernel_size=max_pool[layer])
                                 )
 
-    size_after_conv = np.prod(conv_net(torch.zeros(1, *input_shape)).shape)
+    size_after_conv = int(np.prod(conv_net(torch.zeros(1, *input_shape)).shape))
     return conv_net, size_after_conv
 
+class MinigridRecurrentPolicy(nn.Module):
+    def __init__(self, obs_space, action_space, config, device):
+        super().__init__()
+        self.device = device
+
+        # ================= VISION ====================
+        # =============================================
+        # If frame stacker
+        c, h, w = obs_space["image"].shape
+
+        self.channel = c
+        self.height = h
+        self.width = w
+
+        # xxxxx_list[0] correspond to the first conv layer, xxxxx_list[1] to the second etc ...
+        channel_list = config["conv_layers_channel"] if "conv_layers_channel" in config else [16, 32, 64]
+        kernel_list = config["conv_layers_size"] if "conv_layers_size" in config else [2, 2, 2]
+        stride_list = config["conv_layers_stride"] if "conv_layers_stride" in config else [1, 1, 1]
+        max_pool_list = config["max_pool_layers"] if "max_pool_layers" in config else [2, 0, 0]
+
+        self.conv_net, self.size_after_conv = conv_factory(input_shape=obs_space["image"].shape,
+                                                           channels=channel_list,
+                                                           kernels=kernel_list,
+                                                           strides=stride_list,
+                                                           max_pool=max_pool_list)
+
+        # ====================== TEXT ======================
+        # ==================================================
+        self.fc_text_embedding_size = config["fc_text_embedding_hidden"]
+        self.num_token =              int(obs_space["mission"].high.max())
+        self.last_hidden_fc_size =    config["last_hidden_fc_size"]
+
+        # Mission : word embedding => gru => linear => concat with vision
+        self.ignore_text = config["ignore_text"]
+        if not self.ignore_text:
+            self.word_embedding_size =       32
+            self.rnn_text_hidden_size =      config["rnn_text_hidden_size"]
+            self.size_after_text_viz_merge = self.fc_text_embedding_size + self.size_after_conv
+
+            self.word_embedding = nn.Embedding(self.num_token, self.word_embedding_size)
+            self.text_rnn =       nn.GRU(self.word_embedding_size, self.rnn_text_hidden_size, batch_first=True)
+            self.fc_language =    nn.Linear(in_features=self.rnn_text_hidden_size,
+                                            out_features=self.fc_text_embedding_size)
+
+        else:
+            self.size_after_text_viz_merge = self.size_after_conv
+
+
+        # ================ Q-values, V, Advantages =========
+        # ==================================================
+        self.n_actions =           action_space.n
+        self.memory_size =         config["rnn_state_hidden_size"]
+        self.last_hidden_fc_size = config["last_hidden_fc_size"]
+        self.memory_lstm_size =    self.size_after_text_viz_merge
+
+        # Adding memory to the agent
+        self.memory_rnn = nn.LSTM(input_size=self.size_after_conv, hidden_size=self.memory_size, batch_first=True)
+
+        self.critic = nn.Sequential(
+            nn.Linear(self.memory_size, self.last_hidden_fc_size),
+            nn.ReLU(),
+            nn.Linear(self.last_hidden_fc_size, 1)
+        )
+
+        self.actor = nn.Sequential(
+                nn.Linear(self.memory_size, self.last_hidden_fc_size),
+                nn.ReLU(),
+                nn.Linear(self.last_hidden_fc_size, self.n_actions)
+            )
+
+        # Initialize network
+        self.apply(init_weights)
+
+    def _text_embedding(self, mission, mission_length):
+        pass
+
+    def forward(self, state, ht, seq_len):
+
+        out_conv = self.conv_net(state["image"])
+        flatten_vision_and_text = out_conv.view(out_conv.shape[0], seq_len, -1)
+        batch_size = flatten_vision_and_text.size(0)
+
+        if not self.ignore_text:
+            # todo
+            out_text = self._text_embedding(mission=state["mission"],
+                                            mission_length=state["mission_length"])
+            flatten_vision_and_text = torch.cat((flatten_vision_and_text, out_text), dim=1)
+
+        if ht is None:
+            ht = torch.zeros(batch_size, seq_len, self.memory_size*2).to(self.device)
+
+        hidden_memory = (ht[:, :, :self.memory_size], ht[:, :, self.memory_size:])
+        all_ht, hidden_memory = self.memory_rnn(flatten_vision_and_text, hidden_memory)
+        flatten_vision_and_text = hidden_memory[0].view(batch_size, -1)
+        memory = torch.cat(hidden_memory, dim=2)
+
+        q_values = self.actor(flatten_vision_and_text)
+        next_state_values = self.critic(flatten_vision_and_text)
+
+        q_values =  next_state_values + q_values - q_values.mean()
+        return q_values, memory
+
+
+
 class MinigridConvPolicy(nn.Module, RecurrentACModel):
-    def __init__(self, obs_space, action_space, config):
+    def __init__(self, obs_space, action_space, config, device):
         super().__init__()
 
         # ================= VISION ====================
@@ -211,6 +315,7 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
     @property
     def semi_memory_size(self):
         return self.memory_lstm_size
+
 
 class InstructionGenerator(nn.Module):
     def __init__(self, input_shape, n_output, config, device):

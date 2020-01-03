@@ -44,6 +44,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         # If there are enough training example, train the generator
         if n_generator_example in self.update_steps:
             self._train_generator()
+            self.update_steps.remove(n_generator_example)
 
         if terminal:
             # Agent failed (reward <= 0), use the generator to compute the instruction performed by the agent
@@ -143,8 +144,8 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             self.optimizer.step()
 
             if self.logger:
-                self.logger.add_scalar("data/generator_loss", loss.detach().item(), self.n_update_generator)
-                self.logger.add_scalar("data/generator_accuracy", accuracy, self.n_update_generator)
+                self.logger.add_scalar("gen_data/generator_loss", loss.detach().item(), self.n_update_generator)
+                self.logger.add_scalar("gen_data/generator_accuracy", accuracy, self.n_update_generator)
 
             self.n_update_generator += 1
             if np.mean(accuracies[-10:]) > self.accuracy_convergence:

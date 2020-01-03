@@ -100,22 +100,38 @@ class RecurrentReplayBuffer(ReplayMemory):
     def __init__(self, config):
         super().__init__(config=config)
 
+        self.episode_length = np.zeros(self.memory_size)
+        self.transition_proba = np.zeros(self.memory_size)
+
     def _store_episode(self, episode_to_store):
         """
         Recurrent buffer stores episode by episode instead of a flat representation
+        This allows to retrieve entire episode, it's smoother to read and pad/batch
+
+        In a flat representation, all samples are uniformely sampled
+        Since the buffer sample episodes by episodes, we will replay samples in small episodes more frequently
+
+        It could be cool, be we don't want to bias the sampling towards smaller sequences
+        Hence, the transition_proba compensate for this bias
         """
         len_episode = len(episode_to_store)
-        # If episode is too long, start cycling through buffer again
-        if self.position + len_episode > self.memory_size:
-            self.position = 0
-            assert len_episode < self.memory_size, \
-                "Problem, buffer not large enough, memory_size {}, len_episode {}".format(self.memory_size, len_episode)
-        # If new episode makes the buffer a bit longer, new length is defined
-        elif self.position + len_episode >= self.len:
-            self.len = self.position + len_episode
 
-        self.memory[self.position:self.position + len_episode] = episode_to_store
-        self.position += len_episode
+        # If end of buffer is reach start cycling through buffer again
+        if self.position + 1 > self.memory_size:
+            self.position = 0
+
+        # Store episode and length
+        self.memory[self.position] = episode_to_store
+        self.episode_length[self.position] = len_episode
+
+        # Push selector and update buffer length if necessary
+        self.position += 1
+        self.len = max(self.len, self.position)
+
+        # Update transition proba
+        self.transition_proba[:self.len] = self.episode_length[:self.len] / self.episode_length[:self.len].sum()
 
     def sample(self, batch_size):
-        pass
+        return np.random.choice(self.memory[:self.len], batch_size, p=self.transition_proba[:self.len])
+
+
