@@ -189,9 +189,6 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
         self.height = h
         self.width = w
 
-        self.lstm_after_conv = config["use_lstm_after_conv"]
-        # frames_conv_net = 1 if self.lstm_after_conv else self.frames
-
         # xxxxx_list[0] correspond to the first conv layer, xxxxx_list[1] to the second etc ...
         channel_list = config["conv_layers_channel"] if "conv_layers_channel" in config else [16, 32, 64]
         kernel_list = config["conv_layers_size"] if "conv_layers_size" in config else [2, 2, 2]
@@ -204,10 +201,6 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
                                                            strides=stride_list,
                                                            max_pool=max_pool_list)
 
-        # Encode each frame and then pass them through a rnn
-        if self.lstm_after_conv:
-            self.memory_rnn = nn.LSTM(self.size_after_conv, self.size_after_conv, batch_first=True)
-
         # ====================== TEXT ======================
         # ==================================================
         self.fc_text_embedding_size = config["fc_text_embedding_hidden"]
@@ -219,6 +212,12 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
         if not self.ignore_text:
             self.word_embedding_size =       32
             self.rnn_text_hidden_size =      config["rnn_text_hidden_size"]
+            
+            if config["use_gated_attention"]:
+                num_features_last_cnn = channel_list[-1]
+                self.att_linear = nn.Linear(self.rnn_text_hidden_size, num_features_last_cnn)
+
+            
             self.size_after_text_viz_merge = self.fc_text_embedding_size + self.size_after_conv
 
             self.word_embedding = nn.Embedding(self.num_token, self.word_embedding_size)
@@ -273,21 +272,24 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
 
     def forward(self, state, memory=None):
 
-        if self.lstm_after_conv:
-            batch_dim = state["image"].shape[0]
-
-            out_conv = self.conv_net(state["image"].reshape(-1, self.channel, self.height, self.width))
-            out_conv = out_conv.reshape(batch_dim, self.frames, -1)
-            (outputs, (h_t, c_t)) = self.memory_rnn(out_conv)
-            flatten_vision_and_text = h_t[0] # get last ht
-        else:
-            out_conv = self.conv_net(state["image"])
-            flatten_vision_and_text = out_conv.view(out_conv.shape[0], -1)
+        out_conv = self.conv_net(state["image"])
+        flatten_vision_and_text = out_conv.view(out_conv.shape[0], -1)
 
         if not self.ignore_text:
             out_text = self._text_embedding(mission=state["mission"],
                                             mission_length=state["mission_length"])
-            flatten_vision_and_text = torch.cat((flatten_vision_and_text, out_text), dim=1)
+
+            if self.use_gated_attention:
+                batch_size, last_conv_size, h, w = out_conv.size()
+
+                attention_weights = self.att_linear(out_text)
+                attention_weights.unsqueeze(2).unsqueeze(3)
+                attention_weights.expand(batch_size, last_conv_size, h, w)
+                assert attention_weights.size() == out_conv.size()
+                flatten_vision_and_text = attention_weights * out_conv
+
+            else:
+                flatten_vision_and_text = torch.cat((flatten_vision_and_text, out_text), dim=1)
 
         if self.use_memory:
             hidden_memory = (memory[:, :self.semi_memory_size], memory[:, self.semi_memory_size:])

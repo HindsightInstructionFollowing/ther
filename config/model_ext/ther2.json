@@ -1,11 +1,11 @@
 {
-  "name" : "ther_acc60_steps100",
+  "name" : "ther_acc70_steps100",
   "algo_params": {
 
     "experience_replay_config" : {
       "use_ther" : true,
       "ther_params" : {
-        "accuracy_convergence" : 0.60,
+        "accuracy_convergence" : 0.70,
         "lr" : 3e-4,
         "batch_size" : 64,
         "weight_decay" : 1e-5,

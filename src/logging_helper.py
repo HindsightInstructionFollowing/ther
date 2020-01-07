@@ -62,7 +62,7 @@ class SweetLogger(SummaryWriter):
                 for op in var_dict['operation']:
                     operation_to_apply = self.str2op[op]
                     value = operation_to_apply(var_dict['values'])
-                    self.add_scalar("data/" + variable_name + '_' + op, value, self.next_dump_step)
+                    self.add_scalar(variable_name + '_' + op, value, self.next_dump_step)
 
             self.reset()
             self.next_dump_step += self.dump_step

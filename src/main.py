@@ -21,15 +21,17 @@ import shutil
 from config import load_config
 from env_utils import create_doom_env, AttrDict
 
+import ray
 
-def train(model_config, env_config, out_dir, seed, model_ext, local_test):
+@ray.remote(num_gpus=0.24)
+def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_test):
 
     # =================== CONFIGURATION==================
     # ===================================================
     full_config, expe_path = load_config(model_config_file=model_config,
                                          model_ext_file=model_ext,
                                          env_config_file=env_config,
-                                         out_dir=out_dir,
+                                         out_dir=exp_dir,
                                          seed=seed)
 
     # Setting up context, when using a headless server, xvfbwrapper might be necessary
@@ -59,8 +61,9 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test):
     q_values_visualizer = QValueVisualizer(proba_log=full_config["q_visualizer_proba_log"],
                                            ep_num_to_log=full_config["q_visualizer_ep_num_to_log"])
 
-    # =================== LOADING ENV =====================
+    # =================== LOADING ENV =====================
     # =====================================================
+    env_creator = None
     if full_config["gym_name"]:
         env_creator = lambda : gym.make(full_config["gym_name"])
     elif full_config["env_type"] == "relationnal":
@@ -74,6 +77,16 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test):
                                             numObjs=env_params["numObjs"],
                                             missions_file_str=env_params["missions_file_str"],
                                             single_mission=env_params["single_mission"])
+
+        if "env_test" in full_config:
+            test_env_creator = lambda : FetchAttrEnv(size=env_params["size"],
+                                                     numObjs=env_params["numObjs"],
+                                                     missions_file_str=full_config["env_test"]["missions_file_str"],
+                                                     n_step_between_test=full_config["env_test"]["n_step_between_test"],
+                                                     n_step_test=full_config["env_test"]["n_step_test"]
+                                                     )
+
+
     elif full_config["env_type"] == "vizdoom":
         args = AttrDict(full_config["env_params"])
         env_creator = lambda : create_doom_env(args)
@@ -84,7 +97,7 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test):
                                                   dict_mission_str=full_config["mission_dict_path"]
                                                   )
 
-    # =================== APPLYING WRAPPER =====================
+    # =================== APPLYING WRAPPER =====================
     # ==========================================================
 
     # First, wrappers defined in    env_config
@@ -97,6 +110,9 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test):
         new_env = wrap_env_from_list(env_creator(), wrappers_list_dict)
         envs.append(new_env)
 
+    if env_creator:
+        test_env_creator = wrap_env_from_list(test_env_creator(), wrappers_list_dict)
+
     n_env_iter = full_config["n_env_iter"]
 
     # =================== DEFINE MODEL ========================
@@ -108,6 +124,7 @@ def train(model_config, env_config, out_dir, seed, model_ext, local_test):
                               device=full_config["device"],
                               logger=tf_logger,
                               visualizer=q_values_visualizer,
+                              test_env=test_env_creator
                               )
     elif full_config["algo"] == "rdqn":
         model = RecurrentDQN(env=envs[0],
@@ -145,11 +162,13 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    train(env_config=args.env_config,
-          #args.env_ext,
-          model_config=args.model_config,
-          model_ext=args.model_ext,
-          out_dir=args.exp_dir,
-          seed=args.seed,
-          local_test=args.local_test
-          )
+    ray.init(num_gpus=1)
+    res = start_experiment.remote(env_config=args.env_config,
+                                  model_config=args.model_config,
+                                  model_ext=args.model_ext,
+                                  exp_dir=args.exp_dir,
+                                  seed=args.seed,
+                                  local_test=args.local_test
+                                  )
+
+    ray.get(res)

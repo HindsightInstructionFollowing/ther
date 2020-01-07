@@ -6,10 +6,10 @@ from copy import deepcopy
 from random import shuffle, randint
 
 EXPE_DEFAULT_CONFIG = {
-    "env_ext": '',
     "model_ext": '',
     "seed": 42,
-    "exp_dir": "default_out"
+    "exp_dir": "default_out",
+    "local_test" : False
 }
 
 def override_config_recurs(config, config_extension):
@@ -30,7 +30,6 @@ def override_config_recurs(config, config_extension):
 
 def load_single_config(config_path):
     return json.load(open(config_path, "r"))
-
 
 def check_json_intregrity(config_file_path, config_dict):
     config_file = open(config_file_path, 'r')
@@ -172,28 +171,6 @@ def read_multiple_ext_file(config_path):
 
     return all_expe_to_run
 
-
-def read_run_directory_again(config_path):
-    all_expe_to_run = []
-
-    for env_dir in os.listdir(config_path):
-
-        env_dir_full = os.path.join(config_path, env_dir)
-        env_config = json.load(open(os.path.join(env_dir_full, 'env_config.json'), "r"))
-
-        for expe_dir in os.listdir(env_dir_full):
-            expe_full_path = os.path.join(env_dir_full, expe_dir)
-            if os.path.isdir(expe_full_path):
-                model_config = json.load(open(os.path.join(expe_full_path, 'model_full_config.json'), "r"))
-
-                expe_config = deepcopy(EXPE_DEFAULT_CONFIG)
-                expe_config["model_config"] = model_config
-                expe_config["env_config"] = env_config
-                all_expe_to_run.append(expe_config)
-
-    return all_expe_to_run
-
-
 def read_multiple_config_file(config_path):
     json_config = json.load(open(os.path.join("config/multiple_run_config", config_path), "r"))
     assert type(json_config) == list, "Should be a list"
@@ -206,63 +183,6 @@ def read_multiple_config_file(config_path):
         all_expe_to_run.append(expe_config)
 
     return all_expe_to_run
-
-
-def create_grid_search_config(grid_path):
-    grid_config = json.load(open(os.path.join("config", "multiple_run_config", grid_path), 'r'))
-
-    all_expe_to_run = []
-
-    param_storage = dict()
-    param_storage["key_order"] = []
-    param_storage["lists"] = []
-
-    for key in grid_config["dqn_params"].keys():
-        param_storage["key_order"].append(key)
-        param_storage["lists"].append(grid_config["dqn_params"][key])
-
-    for param_tuple in it.product(*param_storage["lists"]):
-        params_dict = dict(zip(param_storage["key_order"], param_tuple))
-        expe_ext = {"dqn_params": params_dict}
-
-        # Join key and value in the name
-        expe_ext["name"] = '-'.join([':'.join(map(str, items)) for items in params_dict.items()])
-
-        expe_config = deepcopy(EXPE_DEFAULT_CONFIG)
-        expe_config["model_ext"] = expe_ext
-        expe_config["model_config"] = grid_config["model_config"]
-        expe_config["env_config"] = grid_config["env_config"]
-
-        expe_config["exp_dir"] = grid_config.get("exp_dir", expe_config["exp_dir"])
-        expe_config["env_ext"] = grid_config.get("env_ext", expe_config["env_ext"])
-
-        all_expe_to_run.append(expe_config)
-
-    only_one_required = grid_config.get("only_one_required", False)
-
-    if only_one_required:
-
-        expe_to_filter = []
-
-        # Filter list : delete expe who doesn't have at least one condition specified
-        for num_expe, expe in enumerate(all_expe_to_run):
-            for condition in only_one_required:
-                value1 = expe["model_ext"]["dqn_params"][condition[0]]
-                value2 = expe["model_ext"]["dqn_params"][condition[1]]
-
-                # if both are 0 reject, if both are positive => reject
-                if bool(value1) == bool(value2):
-                    expe_to_filter.append(num_expe)
-
-        # Delete expe that are in the filter
-        for num_expe in reversed(expe_to_filter):
-            all_expe_to_run.pop(num_expe)
-
-    # Grid search become random search, yea.
-    shuffle(all_expe_to_run)
-
-    return all_expe_to_run
-
 
 def extend_multiple_seed(all_expe_to_run, number_of_seed=2):
     extended_expe_list = []

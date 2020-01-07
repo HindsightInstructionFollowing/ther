@@ -12,7 +12,7 @@ import time
 
 class BaseDoubleDQN(nn.Module):
 
-    def __init__(self, env, config, logger, visualizer, device='cpu'):
+    def __init__(self, env, test_env, config, logger, visualizer, device='cpu'):
         super(BaseDoubleDQN, self).__init__()
 
         if config["architecture"] == "conv":
@@ -23,6 +23,7 @@ class BaseDoubleDQN(nn.Module):
             nn_creator = MlpNet
 
         self.env = env
+        self.test_env = test_env
         self.tf_logger = logger
         self.q_values_visualizer = visualizer
 
@@ -192,8 +193,8 @@ class BaseDoubleDQN(nn.Module):
 
         # Log important info, see logging_helper => SweetLogger for more details
         if self.writer:
-            self.writer.log("percent_terminal", batch_terminal.sum().item()/self.batch_size)
-            self.writer.log("n_update_target", self.n_update_target)
+            self.writer.log("train/percent_terminal", batch_terminal.sum().item()/self.batch_size)
+            self.writer.log("train/n_update_target", self.n_update_target)
 
         return loss.detach().item()
 
@@ -203,12 +204,68 @@ class BaseDoubleDQN(nn.Module):
                 "param {} changed".format(param_name)
 
 
+    def test(self, display):
+
+        print("==============================")
+        print("Break, using model in test env")
+        print("==============================")
+
+        test_step = 0
+        episode_num = 0
+        with display:
+            while test_step < self.test_env.n_step_test:
+
+                done = False
+                obs = self.test_env.reset()
+                iter_this_ep = 0
+                reward_this_ep = 0
+                begin_ep_time = time.time()
+                ht = None
+
+                while not done:
+                    act, q_values, ht = self.select_action(obs, ht)
+                    new_obs, reward, done, info = self.test_env.step(act)
+
+                    iter_this_ep += 1
+                    test_step += 1
+                    reward_this_ep += reward
+
+                    obs = new_obs
+
+                    self.tf_logger.log("test/max_q_val", max(q_values), operation='max')
+                    self.tf_logger.log("test/min_q_val", min(q_values), operation='min')
+
+                    # Dump tensorboard stats
+                    self.tf_logger.dump(total_step=test_step)
+
+                # ============ END OF EP ==============
+                # =====================================
+                episode_num += 1
+                time_since_ep_start = time.time() - begin_ep_time
+
+                print(
+                    "TEST : End of ep #{} Time since begin ep : {:.2f}, Time per step : {:.2f} Total iter : {}  iter this ep : {} rewrd : {:.3f}".format(
+                        episode_num, time_since_ep_start, time_since_ep_start / iter_this_ep, test_step,
+                        iter_this_ep,
+                        reward_this_ep))
+
+                self.tf_logger.log("test/n_iter_per_ep", iter_this_ep)
+                self.tf_logger.log("test/wrong_pick", int(iter_this_ep < self.env.unwrapped.max_steps and reward_this_ep <= 0))
+                self.tf_logger.log("test/time_out", int(iter_this_ep >= self.env.unwrapped.max_steps))
+                self.tf_logger.log("test/reward", reward_this_ep)
+                self.tf_logger.log("test/accuracy", reward_this_ep > 0)
+
+        print("Back to training")
+        print("================")
+
     def train(self, n_env_iter, visualizer=None, display=None):
 
         if not display:
             display = open("empty_context.txt", 'w')
         self.environment_step = 1
         episode_num = 1
+
+        next_test = self.test_env.n_step_between_test
 
         with display:
             while self.environment_step < n_env_iter:
@@ -237,9 +294,9 @@ class BaseDoubleDQN(nn.Module):
 
                     obs = new_obs
 
-                    self.tf_logger.log("loss", loss)
-                    self.tf_logger.log("max_q_val", max(q_values), operation='max')
-                    self.tf_logger.log("min_q_val", min(q_values), operation='min')
+                    self.tf_logger.log("train/loss", loss)
+                    self.tf_logger.log("train/max_q_val", max(q_values), operation='max')
+                    self.tf_logger.log("train/min_q_val", min(q_values), operation='min')
 
                     # Dump tensorboard stats
                     self.tf_logger.dump(total_step=self.environment_step)
@@ -249,28 +306,32 @@ class BaseDoubleDQN(nn.Module):
                                                                                ep_num=episode_num)
                     if image is not None:
                         self.tf_logger.add_image(tag="data/q_value_ep{}".format(episode_num),
-                                            img_tensor=image,
-                                            global_step=iter_this_ep,
-                                            dataformats="HWC")
+                                                 img_tensor=image,
+                                                 global_step=iter_this_ep,
+                                                 dataformats="HWC")
 
                 # ============ END OF EP ==============
                 # =====================================
                 episode_num += 1
                 time_since_ep_start = time.time() - begin_ep_time
 
-                loss_mean = np.mean(self.tf_logger.variable_to_log['loss']['values'])
+                loss_mean = np.mean(self.tf_logger.variable_to_log['train/loss']['values'])
                 print("loss_mean {}".format(loss_mean))
                 print(
                 "End of ep #{} Time since begin ep : {:.2f}, Time per step : {:.2f} Total iter : {}  iter this ep : {} rewrd : {:.3f}".format(
                     episode_num, time_since_ep_start, time_since_ep_start / iter_this_ep, self.environment_step, iter_this_ep,
                     reward_this_ep))
 
-                self.tf_logger.log("n_iter_per_ep", iter_this_ep)
-                self.tf_logger.log("wrong_pick", int(iter_this_ep < self.env.unwrapped.max_steps and reward_this_ep <= 0))
-                self.tf_logger.log("time_out", int(iter_this_ep >= self.env.unwrapped.max_steps))
-                self.tf_logger.log("reward", reward_this_ep)
-                self.tf_logger.log("accuracy", reward_this_ep > 0)
-                self.tf_logger.log("epsilon", self.current_epsilon)
+                self.tf_logger.log("train/n_iter_per_ep", iter_this_ep)
+                self.tf_logger.log("train/wrong_pick", int(iter_this_ep < self.env.unwrapped.max_steps and reward_this_ep <= 0))
+                self.tf_logger.log("train/time_out", int(iter_this_ep >= self.env.unwrapped.max_steps))
+                self.tf_logger.log("train/reward", reward_this_ep)
+                self.tf_logger.log("train/accuracy", reward_this_ep > 0)
+                self.tf_logger.log("train/epsilon", self.current_epsilon)
+
+                if self.test_env and self.environment_step > next_test:
+                    self.test(display=display)
+                    next_test = self.environment_step + self.test_env.n_step_between_test
 
 
 
