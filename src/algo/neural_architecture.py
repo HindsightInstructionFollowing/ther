@@ -123,7 +123,7 @@ class MinigridRecurrentPolicy(nn.Module):
         self.memory_lstm_size =    self.size_after_text_viz_merge
 
         # Adding memory to the agent
-        self.memory_rnn = nn.LSTM(input_size=self.size_after_conv, hidden_size=self.memory_size, batch_first=True)
+        self.memory_rnn = nn.LSTM(input_size=self.size_after_text_viz_merge, hidden_size=self.memory_size, batch_first=True)
 
         self.critic = nn.Sequential(
             nn.Linear(self.memory_size, self.last_hidden_fc_size),
@@ -141,30 +141,59 @@ class MinigridRecurrentPolicy(nn.Module):
         self.apply(init_weights)
 
     def _text_embedding(self, mission, mission_length):
-        pass
 
-    def forward(self, state, ht, seq_len):
+        # state["mission"] contains list of indices
+        embedded = self.word_embedding(mission)
+        # Pack padded batch of sequences for RNN module
+        packed = nn.utils.rnn.pack_padded_sequence(input=embedded,
+                                                   lengths=mission_length,
+                                                   batch_first=True, enforce_sorted=False)
+        # Forward pass through GRU
+        outputs, hidden = self.text_rnn(packed)
+        out_language = self.fc_language(hidden[0])
+        out_language = F.relu(out_language)
+        return out_language
+
+    def forward(self, state, ht=None):
+
+        max_seq_len = state["max_sequence_length"]
+        sequences_length = state["state_sequence_lengths"]
+        padding_mask = state["padding_mask"]
+        n_sequence = sequences_length.size(0)
 
         out_conv = self.conv_net(state["image"])
-        flatten_vision_and_text = out_conv.view(out_conv.shape[0], seq_len, -1)
-        batch_size = flatten_vision_and_text.size(0)
+
+        flatten_vision_and_text = out_conv.view(-1, self.size_after_conv)
 
         if not self.ignore_text:
-            # todo
             out_text = self._text_embedding(mission=state["mission"],
                                             mission_length=state["mission_length"])
             flatten_vision_and_text = torch.cat((flatten_vision_and_text, out_text), dim=1)
 
+        vision_and_text_sequence_format = flatten_vision_and_text.view(n_sequence, max_seq_len, -1)
+        vision_and_text_sequence_format = torch.nn.utils.rnn.pack_padded_sequence(input=vision_and_text_sequence_format,
+                                                                                  lengths=sequences_length,
+                                                                                  batch_first=True,
+                                                                                  enforce_sorted=False)
+
+
         if ht is None:
-            ht = torch.zeros(batch_size, seq_len, self.memory_size*2).to(self.device)
+            ht = torch.zeros(1, n_sequence, self.memory_size*2).to(self.device)
 
         hidden_memory = (ht[:, :, :self.memory_size], ht[:, :, self.memory_size:])
-        all_ht, hidden_memory = self.memory_rnn(flatten_vision_and_text, hidden_memory)
-        flatten_vision_and_text = hidden_memory[0].view(batch_size, -1)
+        all_ht, hidden_memory = self.memory_rnn(vision_and_text_sequence_format, hidden_memory)
+
+        all_ht, size = torch.nn.utils.rnn.pad_packed_sequence(all_ht, batch_first=True)
+
         memory = torch.cat(hidden_memory, dim=2)
 
-        q_values = self.actor(flatten_vision_and_text)
-        next_state_values = self.critic(flatten_vision_and_text)
+        flatten_vision_and_text = all_ht.view(-1, self.memory_size)
+
+        # Delete all useless padding in state sequences, to avoid computing the q-values for them
+        flatten_vision_and_text_without_padding = flatten_vision_and_text[padding_mask == 1]
+
+        q_values = self.actor(flatten_vision_and_text_without_padding)
+        next_state_values = self.critic(flatten_vision_and_text_without_padding)
 
         q_values =  next_state_values + q_values - q_values.mean()
         return q_values, memory
@@ -207,18 +236,20 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
         self.num_token =              int(obs_space["mission"].high.max())
         self.last_hidden_fc_size =    config["last_hidden_fc_size"]
 
+        self.use_gated_attention = config["use_gated_attention"]
+
         # Mission : word embedding => gru => linear => concat with vision
         self.ignore_text = config["ignore_text"]
         if not self.ignore_text:
             self.word_embedding_size =       32
             self.rnn_text_hidden_size =      config["rnn_text_hidden_size"]
             
-            if config["use_gated_attention"]:
-                num_features_last_cnn = channel_list[-1]
-                self.att_linear = nn.Linear(self.rnn_text_hidden_size, num_features_last_cnn)
-
-            
             self.size_after_text_viz_merge = self.fc_text_embedding_size + self.size_after_conv
+
+            if self.use_gated_attention:
+                num_features_last_cnn = channel_list[-1]
+                self.att_linear = nn.Linear(self.fc_text_embedding_size, num_features_last_cnn)
+                self.size_after_text_viz_merge = self.size_after_conv
 
             self.word_embedding = nn.Embedding(self.num_token, self.word_embedding_size)
             self.text_rnn =       nn.GRU(self.word_embedding_size, self.rnn_text_hidden_size, batch_first=True)
@@ -282,11 +313,12 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
             if self.use_gated_attention:
                 batch_size, last_conv_size, h, w = out_conv.size()
 
-                attention_weights = self.att_linear(out_text)
-                attention_weights.unsqueeze(2).unsqueeze(3)
+                attention_weights = F.sigmoid(self.att_linear(out_text))
+                attention_weights = attention_weights.unsqueeze(2).unsqueeze(3)
                 attention_weights.expand(batch_size, last_conv_size, h, w)
                 assert attention_weights.size() == out_conv.size()
                 flatten_vision_and_text = attention_weights * out_conv
+                flatten_vision_and_text = flatten_vision_and_text.view(batch_size, -1)
 
             else:
                 flatten_vision_and_text = torch.cat((flatten_vision_and_text, out_text), dim=1)
@@ -325,7 +357,7 @@ class InstructionGenerator(nn.Module):
         Basic instruction generator
         Convert state (or trajectory) to an instruction in approximate english (not very sophisticated litterature, sorry)
 
-
+        todo : trajectory
         """
         super().__init__()
         self.device = device
@@ -344,6 +376,7 @@ class InstructionGenerator(nn.Module):
 
         # Not being used at the moment
         # self.teacher_forcing_ratio = config["teacher_forcing"]
+
 
         self.conv_net, size_after_conv = conv_factory(input_shape=input_shape,
                                                       channels=channel_list,
@@ -406,10 +439,11 @@ class InstructionGenerator(nn.Module):
             _, last_ht = self.rnn_decoder(input=next_input, hx=last_ht)
             softmax_token = F.softmax(self.mlp_decoder(last_ht.view(1, -1)), dim=1)
             _, next_token = torch.max(softmax_token, dim=1)
-            generated_token.append(next_token.item())
 
             if next_token == self.END_TOKEN or len(generated_token) > self.generator_max_len:
                 is_last_word = True
+            else:
+                generated_token.append(next_token.item())
 
             next_token = next_token.unsqueeze(0)
 

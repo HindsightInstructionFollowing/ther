@@ -8,6 +8,7 @@
   "algo_params": {
     "architecture" : "conv",
     "architecture_params" : {
+      "use_gated_attention" : false,
       "ignore_text" : false,
       "use_lstm_after_conv" : false,
       "rnn_text_hidden_size" : 128,

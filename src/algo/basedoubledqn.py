@@ -12,7 +12,7 @@ import time
 
 class BaseDoubleDQN(nn.Module):
 
-    def __init__(self, env, test_env, config, logger, visualizer, device='cpu'):
+    def __init__(self, env, config, test_env=None, logger=None, visualizer=None, device='cpu'):
         super(BaseDoubleDQN, self).__init__()
 
         if config["architecture"] == "conv":
@@ -73,6 +73,7 @@ class BaseDoubleDQN(nn.Module):
         self.to(self.device)
 
         self.writer = logger
+        self.PADDING_MISSION = 2  # Padding is always 2, checked by vocab
 
     def select_action(self, state, ht=None):
 
@@ -129,7 +130,7 @@ class BaseDoubleDQN(nn.Module):
 
         batch_mission = nn.utils.rnn.pad_sequence(sequences=batch_transitions.mission,
                                                   batch_first=True,
-                                                  padding_value=2 # Padding is always 2, checked by vocab
+                                                  padding_value=self.PADDING_MISSION
                                                   ).to(self.device)
 
         # Compute targets according to the Bellman eq
@@ -265,7 +266,7 @@ class BaseDoubleDQN(nn.Module):
         self.environment_step = 1
         episode_num = 1
 
-        next_test = self.test_env.n_step_between_test
+        next_test = self.test_env.n_step_between_test if self.test_env is not None else 0
 
         with display:
             while self.environment_step < n_env_iter:

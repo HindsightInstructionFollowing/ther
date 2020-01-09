@@ -132,6 +132,7 @@ class RecurrentReplayBuffer(ReplayMemory):
         self.transition_proba[:self.len] = self.episode_length[:self.len] / self.episode_length[:self.len].sum()
 
     def sample(self, batch_size):
+        return self.memory[:3]
         return np.random.choice(self.memory[:self.len], batch_size, p=self.transition_proba[:self.len])
 
 

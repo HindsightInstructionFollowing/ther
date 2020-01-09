@@ -23,7 +23,7 @@ from env_utils import create_doom_env, AttrDict
 
 import ray
 
-@ray.remote(num_gpus=0.24)
+#@ray.remote(num_gpus=0.24)
 def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_test):
 
     # =================== CONFIGURATION==================
@@ -63,7 +63,7 @@ def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_t
 
     # =================== LOADING ENV =====================
     # =====================================================
-    env_creator = None
+    test_env_creator = None
     if full_config["gym_name"]:
         env_creator = lambda : gym.make(full_config["gym_name"])
     elif full_config["env_type"] == "relationnal":
@@ -110,8 +110,10 @@ def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_t
         new_env = wrap_env_from_list(env_creator(), wrappers_list_dict)
         envs.append(new_env)
 
-    if env_creator:
-        test_env_creator = wrap_env_from_list(test_env_creator(), wrappers_list_dict)
+    if test_env_creator:
+        test_env = wrap_env_from_list(test_env_creator(), wrappers_list_dict)
+    else:
+        test_env = None
 
     n_env_iter = full_config["n_env_iter"]
 
@@ -124,7 +126,7 @@ def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_t
                               device=full_config["device"],
                               logger=tf_logger,
                               visualizer=q_values_visualizer,
-                              test_env=test_env_creator
+                              test_env=test_env
                               )
     elif full_config["algo"] == "rdqn":
         model = RecurrentDQN(env=envs[0],
@@ -132,6 +134,7 @@ def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_t
                              device=full_config["device"],
                              logger=tf_logger,
                              visualizer=q_values_visualizer,
+                             test_env=test_env
                              )
     else:
         model = PPOAlgo(envs=envs,
@@ -162,13 +165,21 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    ray.init(num_gpus=1)
-    res = start_experiment.remote(env_config=args.env_config,
-                                  model_config=args.model_config,
-                                  model_ext=args.model_ext,
-                                  exp_dir=args.exp_dir,
-                                  seed=args.seed,
-                                  local_test=args.local_test
-                                  )
+    # ray.init(num_gpus=1, local_mode=args.local_test)
+    # res = start_experiment.remote(env_config=args.env_config,
+    #                               model_config=args.model_config,
+    #                               model_ext=args.model_ext,
+    #                               exp_dir=args.exp_dir,
+    #                               seed=args.seed,
+    #                               local_test=args.local_test
+    #                               )
+    #
+    # ray.get(res)
 
-    ray.get(res)
+    start_experiment(env_config=args.env_config,
+                     model_config=args.model_config,
+                     model_ext=args.model_ext,
+                     exp_dir=args.exp_dir,
+                     seed=args.seed,
+                     local_test=args.local_test
+                     )

@@ -6,8 +6,8 @@ import torch.nn.functional as F
 import random
 
 class RecurrentDQN(BaseDoubleDQN):
-    def __init__(self, env, config, logger, visualizer, device='cpu'):
-        super().__init__(env, config, logger, visualizer, device)
+    def __init__(self, env, config, logger=None, visualizer=None, test_env=None, device='cpu'):
+        super().__init__(env=env, test_env=test_env, config=config, logger=logger, visualizer=visualizer, device=device)
 
         self.bppt_size = config["max_bptt"]
 
@@ -16,7 +16,7 @@ class RecurrentDQN(BaseDoubleDQN):
 
         self.fuse_text_before_memory = True
 
-        self.state_padding = torch.zeros(*self.env.observation_space["image"].shape)
+        self.state_padding = torch.zeros(1, *self.env.observation_space["image"].shape)
         self.action_padding = env.action_space.n + 1
         self.terminal_padding = 1
 
@@ -44,52 +44,67 @@ class RecurrentDQN(BaseDoubleDQN):
         Subsample, pad and batch states
         """
 
-        batch_state = []
-        batch_next_state = []
-        batch_mission = []
-        batch_terminal = [] # Not useful to pad
-        batch_action = [] # Not useful to pad
-        state_sequence_lengths = []
+        max_length = len(max(transitions, key=lambda x:len(x)))
+        batch_dict = {
+            "state" :                  [],
+            "next_state" :             [],
+            "mission" :                [],
+            "mission_length" :         [],
+            "padding_mask" :           [],
+            "state_sequence_lengths" : [],
+            "terminal" :               [],
+            "action" :                 [],
+            "reward" :                 [],
+            "max_sequence_length" : max_length
+        }
 
         for state_sequences in transitions:
 
-            # Select only samples required for bptt
-            if len(state_sequences) >= self.bppt_size:
-                # Todo : sample shorter sequences ? To sample epsisode's end more often
-                begin_id_rand = random.randint(0, len(state_sequences)-self.bppt_size)
-                state_sequences = state_sequences[begin_id_rand:]
-
             seq_length = len(state_sequences)
-            padding_length = self.bppt_size - seq_length
+            padding_length = max_length - seq_length
+            mask = [1 for i in range(max_length)]
 
             if padding_length > 0:
-                state_sequences.current_state.extend(  [self.state_padding]                *padding_length)
-                state_sequences.next_state.extend(     [self.state_padding]                *padding_length)
-                state_sequences.mission.extend(        [state_sequences.mission[-1]]       *padding_length)
-                state_sequences.mission_length.extend( [state_sequences.mission_length[-1]]*padding_length)
+                dummy_transition = [self.replay_buffer.transition(current_state=self.state_padding,
+                                                                  action=self.action_padding,
+                                                                  reward=0,
+                                                                  next_state=self.state_padding,
+                                                                  terminal=self.terminal_padding,
+                                                                  mission_length=state_sequences[0].mission_length,
+                                                                  mission=state_sequences[0].mission
+                                                                  )]
+                state_sequences.extend(dummy_transition * padding_length)
+                mask[seq_length:] = [0 for _ in range(padding_length)]
 
-                # state_sequences.actions.extend([self.action_padding]*padding_length)
-                # state_sequences.terminal.extend([self.terminal_padding]*padding_length)
 
-            state_sequence_lengths.append(seq_length)
-            batch_state.extend(state_sequences.current_state)
-            batch_next_state.extend(state_sequences.next_state)
-            batch_terminal.extend(state_sequences.terminal)
-            batch_action.extend(state_sequences.action)
-            batch_mission.extend(state_sequences.mission)
+            batch_dict["state_sequence_lengths"].append(seq_length)
+            state_sequences_transitions = self.replay_buffer.transition(*zip(*state_sequences))
 
-        return batch_state, batch_next_state, batch_terminal, batch_action, batch_mission, state_sequence_lengths
+            batch_dict["state"].extend(         state_sequences_transitions.current_state)
+            batch_dict["next_state"].extend(    state_sequences_transitions.next_state)
+            batch_dict["terminal"].extend(      state_sequences_transitions.terminal)
+            batch_dict["action"].extend(        state_sequences_transitions.action)
+            batch_dict["mission"].extend(       state_sequences_transitions.mission)
+            batch_dict["mission_length"].extend(state_sequences_transitions.mission_length)
+            batch_dict["reward"].extend(        state_sequences_transitions.reward)
+            batch_dict["padding_mask"].extend(                              mask)
 
-    def optimize_model(self, state, action, next_state, reward, done):
-        hindsight_mission = next_state["hindsight_mission"] if "hindsight_mission" in next_state else None
-        self.replay_buffer.add_transition(current_state=state["image"].cpu(),
-                                          action=action,
-                                          next_state=next_state["image"].cpu(),
-                                          reward=reward,
-                                          mission=next_state["mission"][0].cpu(),
-                                          mission_length=next_state["mission_length"].cpu(),
-                                          terminal=done,
-                                          hindsight_mission=hindsight_mission)
+        assert len(batch_dict["padding_mask"]) == len(batch_dict["mission"])
+        assert len(batch_dict["padding_mask"]) == len(batch_dict["state"])
+
+        return batch_dict
+
+    def optimize_model(self, state=None, action=None, next_state=None, reward=None, done=None):
+        if state is not None:
+            hindsight_mission = next_state["hindsight_mission"] if "hindsight_mission" in next_state else None
+            self.replay_buffer.add_transition(current_state=state["image"].cpu(),
+                                              action=action,
+                                              next_state=next_state["image"].cpu(),
+                                              reward=reward,
+                                              mission=next_state["mission"][0].cpu(),
+                                              mission_length=next_state["mission_length"].cpu(),
+                                              terminal=done,
+                                              hindsight_mission=hindsight_mission)
 
         if len(self.replay_buffer) < self.batch_size:
             return 0
@@ -97,75 +112,65 @@ class RecurrentDQN(BaseDoubleDQN):
         # Sample from the memory replay
         transitions = self.replay_buffer.sample(self.batch_size)
 
-        batch_state, batch_next_state, batch_terminal, batch_action, batch_mission, state_sequence_lengths = self.pad_state_sequences(transitions=transitions)
-        batch_curr_state = torch.cat(batch_state).to(device=self.device)
-        batch_next_state = torch.cat(batch_next_state).to(device=self.device)
+        batch_dict = self.preprocess_state_sequences(transitions=transitions)
 
-        batch_terminal = torch.as_tensor(batch_terminal, dtype=torch.int32, device=self.device)
-        batch_action = torch.as_tensor(batch_action, dtype=torch.long, device=self.device).reshape(-1, 1)
-        #batch_mission_length = torch.cat(batch_mission_length).to(self.device)
+        # Padding mask corresponding to real transitions and fake padded one to allows for the lstm computation
+        batch_mask = torch.LongTensor(batch_dict["padding_mask"]).to(self.device)
+        batch_sequence_length = torch.LongTensor(batch_dict["state_sequence_lengths"]).to(self.device)
+
+        batch_curr_state = torch.cat(batch_dict["state"]).to(device=self.device)
+        batch_next_state = torch.cat(batch_dict["next_state"]).to(device=self.device)
+
+        batch_mission = torch.nn.utils.rnn.pad_sequence(sequences=batch_dict["mission"],
+                                                        batch_first=True,
+                                                        padding_value=self.PADDING_MISSION).to(self.device)
+
+        batch_mission_length = torch.cat(batch_dict["mission_length"]).to(self.device)
+
+        # Convert to torch and remove padding since it's not useful for those variables
+        batch_terminal = torch.as_tensor(batch_dict["terminal"], dtype=torch.int32)[batch_mask == 1].to(self.device)
+        batch_action = torch.as_tensor(batch_dict["action"], dtype=torch.long)[batch_mask == 1].to(self.device).reshape(-1, 1)
 
 
-        quit()
+        #============= Computing targets ===========
+        #===========================================
 
-        ###########################################################################################################
-        ###########################################################################################################
-        ###########################################################################################################
-        ###########################################################################################################
-        ###########################################################################################################
-        ###########################################################################################################
-        ###########################################################################################################
+        targets = torch.FloatTensor(batch_dict["reward"])[batch_mask == 1].to(self.device).reshape(-1, 1)
 
-
-        # Sort transitions by missions length (for packing and padding)
-        transitions = sorted(transitions,
-                             key=lambda x: -x.mission.size(0))
-
-        # Batch the transitions into one namedtuple
-        batch_transitions = self.replay_buffer.transition(*zip(*transitions))
-
-        # Create batches data, easier to manipulate
-        batch_curr_state = torch.cat(batch_transitions.current_state).to(device=self.device)
-        batch_next_state = torch.cat(batch_transitions.next_state).to(device=self.device)
-        batch_terminal = torch.as_tensor(batch_transitions.terminal, dtype=torch.int32, device=self.device)
-        batch_action = torch.as_tensor(batch_transitions.action, dtype=torch.long, device=self.device).reshape(-1, 1)
-        batch_mission_length = torch.cat(batch_transitions.mission_length).to(self.device)
-
-        batch_mission = nn.utils.rnn.pad_sequence(sequences=batch_transitions.mission,
-                                                  batch_first=True,
-                                                  padding_value=2 # Padding is always 2, checked by vocab
-                                                  ).to(self.device)
-
-        # Compute targets according to the Bellman eq
         batch_next_state_non_terminal_dict = {
-            "image": batch_next_state[batch_terminal == 0],
-            "mission": batch_mission[batch_terminal == 0],
-            "mission_length": batch_mission_length[batch_terminal == 0]
+            "image": batch_next_state,
+            "mission": batch_mission,
+            "mission_length": batch_mission_length,
+            "padding_mask": batch_mask,
+            "state_sequence_lengths": batch_sequence_length,
+            "max_sequence_length": batch_dict["max_sequence_length"]
         }
 
-        # Evaluation of the Q value with the target net
-        targets = torch.as_tensor(batch_transitions.reward, dtype=torch.float32, device=self.device).reshape(-1, 1)
+        # Double DQN : Selection of the action with the policy net
+        q_values_for_action, _ = self.policy_net(batch_next_state_non_terminal_dict)
+        q_values_next_state, _ = self.target_net(batch_next_state_non_terminal_dict)
 
-        # Double DQN
-        if torch.sum(batch_terminal) != self.batch_size:
-            # Selection of the action with the policy net
-            q_values, _, _ = self.policy_net(batch_next_state_non_terminal_dict)
-            q_values_next_state, _, _ = self.target_net(batch_next_state_non_terminal_dict)
+        q_values_for_action = q_values_for_action[batch_terminal == 0]
+        q_values_next_state = q_values_next_state[batch_terminal == 0]
 
-            args_actions = q_values.max(1)[1].reshape(-1, 1)
-            targets[batch_terminal == 0] = targets[batch_terminal == 0] \
-                                       + self.gamma \
-                                       * q_values_next_state.gather(1, args_actions).detach()
+        args_actions = q_values_for_action.max(1)[1].reshape(-1, 1)
+        targets[batch_terminal == 0] = targets[batch_terminal == 0] \
+                                      + self.gamma \
+                                      * q_values_next_state.gather(1, args_actions).detach()
 
         targets = targets.reshape(-1)
 
-        # Compute the current estimate of Q
+        # ====== Compute the current estimate of Q ======
+        # ===============================================
         batch_curr_state_dict = {
             "image": batch_curr_state,
             "mission": batch_mission,
-            "mission_length": batch_mission_length
+            "mission_length": batch_mission_length,
+            "padding_mask" : batch_mask,
+            "state_sequence_lengths" : batch_sequence_length,
+            "max_sequence_length" : batch_dict["max_sequence_length"]
         }
-        predictions, _, _ = self.policy_net(batch_curr_state_dict)
+        predictions, _ = self.policy_net(batch_curr_state_dict)
         predictions = predictions.gather(1, batch_action).view(-1)
 
         # Loss
@@ -197,10 +202,129 @@ class RecurrentDQN(BaseDoubleDQN):
 
         # Log important info, see logging_helper => SweetLogger for more details
         if self.writer:
-            self.writer.log("percent_terminal", batch_terminal.sum().item()/self.batch_size)
+            self.writer.log("percent_terminal", batch_terminal.sum().item() / self.batch_size)
             self.writer.log("n_update_target", self.n_update_target)
 
         return loss.detach().item()
+
+
+if __name__ == "__main__" :
+
+    from gym_minigrid.wrappers import wrap_env_from_list
+    from gym_minigrid.envs.fetch_attr import FetchAttrEnv
+    import dill
+
+    dqn_config = {
+  "name" : "minigrid_fetch_rdddqn_tests_no_text4",
+  "algo" : "rdqn",
+  "device" : "cuda",
+
+  "dump_log_every" : 10000,
+
+  "algo_params": {
+    "architecture" : "conv_lstm",
+    "architecture_params" : {
+      "ignore_text" : False,
+      "rnn_state_hidden_size" : 256,
+      "rnn_text_hidden_size" : 128,
+      "fc_text_embedding_hidden" : 32,
+      "last_hidden_fc_size" : 64
+    },
+
+    "experience_replay_config" : {
+      "hindsight_reward" : 1,
+      "size" : 40000,
+      "use_her" : False,
+      "prioritize" : False,
+      "use_ther" : False,
+      "ther_params" : {
+        "accuracy_convergence" : 0.9,
+        "lr" : 3e-4,
+        "batch_size" : 64,
+        "weight_decay" : 1e-4,
+        "update_steps": [100,300,1000],
+        "n_sample_before_using_generator" : 300,
+
+        "architecture_params": {
+          "conv_layers_channel" : [16,32,64],
+          "conv_layers_size" : [2,2,2],
+          "conv_layers_stride" : [1,1,1],
+          "max_pool_layers" : [2,0,0],
+          "embedding_dim" : 32,
+          "generator_max_len" : 10
+
+        }
+      }
+    },
+
+    "n_parallel_env" : 1,
+    "batch_size" : 3,
+    "lr" : 1e-5,
+    "gamma" : 0.99,
+    "update_target_every" : 2000,
+    "step_exploration" : 20000,
+    "weight_decay" : 0,
+    "max_bptt" : 8,
+    "burn_in" : 0
+  },
+
+  "wrappers_model" : [
+    {"name" : "RemoveUselessChannelWrapper", "params" : {}},
+    {"name" : "RemoveUselessActionWrapper", "params" : {}},
+    {"name" : "MinigridTorchWrapper", "params" : {"device" : "cuda"}}
+  ]
+
+}
+
+    env_config = {
+            "name": "fetch_4ttr_N10_S10_80_3e6_and_test_env_more_test",
+            "gym_name": None,
+            "env_type": "fetch",
+
+            "n_env_iter": 3e6,
+
+            "q_visualizer_proba_log": 0,
+            "q_visualizer_ep_num_to_log": [1, 2, 100, 1000, 4000],
+
+            "env_params": {
+                "missions_file_str": "gym-minigrid/gym_minigrid/envs/missions/fetch_train_missions_80_percent.json",
+                "size": 10,
+                "numObjs": 10,
+                "single_mission": False
+            },
+
+            "env_test": {
+                "n_step_between_test": 50000,
+                "n_step_test": 10000,
+                "missions_file_str": "gym-minigrid/gym_minigrid/envs/missions/fetch_holdout_20_percent.json"
+            },
+
+            "wrappers_env": [
+                {
+                    "name": "Word2IndexWrapper",
+                    "params": {"vocab_file_str":"gym-minigrid/gym_minigrid/envs/missions/vocab_fetch.json"}
+                }
+            ]
+        }
+
+    env_params = env_config["env_params"]
+    env = FetchAttrEnv(size=env_params["size"],
+                 numObjs=env_params["numObjs"],
+                 missions_file_str=env_params["missions_file_str"],
+                 single_mission=env_params["single_mission"])
+
+    wrappers_list_dict = env_config["wrappers_env"]
+    wrappers_list_dict.extend(dqn_config["wrappers_model"])
+
+    new_env = wrap_env_from_list(env, wrappers_list_dict)
+
+
+    dqn = RecurrentDQN(new_env, dqn_config["algo_params"])
+    dqn.replay_buffer = dill.load(open("recurrent_buffer_inco.pkl", 'rb'))
+    dqn.replay_buffer.len = 3
+
+    dqn.optimize_model()
+
 
 
 

@@ -9,18 +9,25 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         super().__init__(config)
 
         config = config["ther_params"]
+
+        # Force to take the last obs, not state
+        input_shape = list(input_shape)
+        input_shape[0] = 3
+
         self.instruction_generator = InstructionGenerator(input_shape=input_shape,
                                                           n_output=n_output,
                                                           config=config["architecture_params"],
                                                           device=device)
 
         # Self useful variable
-        self.update_steps =                    set(config["update_steps"])
+        self.update_steps =                    config["update_steps"]
         self.n_sample_before_using_generator = config["n_sample_before_using_generator"]
         self.batch_size =                      config["batch_size"]
         self.accuracy_convergence =            config["accuracy_convergence"] # Accuracy before generator is considered good
         self.padding_value =                   2 # By convention, checked by Word2Idx in wrappers.py
-        self.n_update_generator =              0
+        self.n_update_generator =              0 # Number of optim steps done on generator
+        self.generator_usage =                 0 # Number of time a sequence has been relabeled
+        self.generator_next_update =           self.update_steps
 
         # Loss and optimization
         self.loss =      F.cross_entropy
@@ -34,43 +41,62 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         self.instruction_generator.to(self.device)
         self.logger = logger
 
-    def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission=None):
+    def _cheat_check(self, true_mission, generated_mission):
+
+        good_attributes = 0
+        for i in range(1,5):
+            if true_mission[-i] in generated_mission:
+                good_attributes += 1
+
+        return good_attributes
+
+    def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission):
         self.current_episode.append(
             self.transition(current_state, action, reward, next_state, terminal, mission, torch.LongTensor([mission.size(0)]))
         )
 
+        self.logger.log("gen/len_dataset", len(self.generator_dataset["states"]))
+
         # Number of sample in the generator dataset
         n_generator_example = len(self.generator_dataset['states'])
         # If there are enough training example, train the generator
-        if n_generator_example in self.update_steps:
+        if n_generator_example > self.generator_next_update:
             self._train_generator()
-            self.update_steps.remove(n_generator_example)
+            self.generator_next_update += self.update_steps
 
         if terminal:
             # Agent failed (reward <= 0), use the generator to compute the instruction performed by the agent
-            if reward <= 0 and n_generator_example > self.n_sample_before_using_generator:
-                assert hindsight_mission is not None, \
-                    "Environment didn't provide hindsight mission, weird ! (Even though it's not used here)"
+            if hindsight_mission and n_generator_example > self.n_sample_before_using_generator:
 
                 last_transition = self.current_episode[-1]
                 last_state =      last_transition.current_state
 
                 # todo : in the long run, should take the whole trajectory as input
-                hindsight_mission = self.instruction_generator.generate(last_state) # check last state represents what you want
+                last_state = last_state[:, -3:].to(self.device)
+                generated_hindsight_mission = self.instruction_generator.generate(last_state)
+
+                if last_state.size(2) == 7:
+                    n_correct_attrib = self._cheat_check(true_mission=hindsight_mission,
+                                                         generated_mission=generated_hindsight_mission)
+
+                    self.logger.add_scalar("gen/n_correct_attrib_gen", n_correct_attrib, self.generator_usage)
+                    self.generator_usage += 1
+
+
 
                 # Substitute the old mission with the new one, change the reward at the end of episode
                 hindsight_episode = []
                 for st, a, wrong_reward, st_plus1, end_ep, wrong_mission, length in self.current_episode:
                     hindsight_reward = self.hindsight_reward if end_ep else 0
-                    len_mission = torch.LongTensor([len(hindsight_mission)])
+                    len_mission = torch.LongTensor([len(generated_hindsight_mission)])
                     hindsight_episode.append(
-                        self.transition(st, a, hindsight_reward, st_plus1, end_ep, hindsight_mission, len_mission)
+                        self.transition(st, a, hindsight_reward, st_plus1, end_ep, generated_hindsight_mission, len_mission)
                     )
                 self._store_episode(hindsight_episode)
 
             # If the agent succeeded, store the state/instruction pair to train the generator
             elif reward > 0:
-                self.generator_dataset["states"].append(current_state)
+                self.generator_dataset["states"].append(current_state[:,-3:])
                 self.generator_dataset["instructions"].append(mission)
                 self.generator_dataset["lengths"].append(mission.size(0))
 

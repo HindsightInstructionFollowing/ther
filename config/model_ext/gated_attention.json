@@ -1,0 +1,15 @@
+{
+  "name" : "use_sig_gated_attention",
+
+  "algo_params": {
+
+    "architecture_params" : {
+      "use_gated_attention" : true
+    }
+
+  }
+
+}
+
+
+
