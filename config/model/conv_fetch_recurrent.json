@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_fetch_rdddqn",
+  "name" : "minigrid_fetch_rdddqn_nstep1",
   "algo" : "rdqn",
   "device" : "cuda",
 
@@ -44,6 +44,7 @@
     "n_parallel_env" : 1,
     "batch_size" : 128,
     "lr" : 1e-5,
+    "n_step" : 1,
     "gamma" : 0.99,
     "update_target_every" : 20000,
     "step_exploration" : 40000,

@@ -54,21 +54,7 @@ class AbstractReplay(ABC):
         self.memory[self.position:self.position + len_episode] = episode_to_store
         self.position += len_episode
 
-    def update_transitions_proba(self):
-        pass
-    def __len__(self):
-        return self.n_episodes
-
-    @abstractmethod
-    def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length,
-                       hindsight_mission):
-        pass  # todo : remove mission_length, can be computed on the fly instead of moving it around
-
-class ReplayMemory(AbstractReplay):
-    def __init__(self, config):
-        super().__init__(config)
-
-    def _add_n_step(self, n_step):
+    def add_n_step_transition(self, n_step):
         current_state, action, terminal, mission, mission_length = self.last_transitions[0]
         sum_return = np.sum(self.last_returns[:n_step] * self.gamma_array[:n_step])
         n_step_state = self.last_states[n_step - 1]
@@ -83,6 +69,20 @@ class ReplayMemory(AbstractReplay):
         self.last_returns.pop(0)
         self.last_states.pop(0)
         self.last_transitions.pop(0)
+
+    def update_transitions_proba(self):
+        pass
+    def __len__(self):
+        return self.n_episodes
+
+    @abstractmethod
+    def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length,
+                       hindsight_mission):
+        pass  # todo : remove mission_length, can be computed on the fly instead of moving it around
+
+class ReplayMemory(AbstractReplay):
+    def __init__(self, config):
+        super().__init__(config)
 
     def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission=None):
         """
@@ -107,14 +107,14 @@ class ReplayMemory(AbstractReplay):
         # The main idea is (almost-)invisible for the main algorithm, we just change the reward and the next state
         # The reward is the cumulative return until n-1 and next_state is the state after n step
         if len(self.last_states) >= self.n_step:
-            self._add_n_step(self.n_step)
+            self.add_n_step_transition(self.n_step)
 
             # If terminal, add all sample even if n_step is not available
             if terminal:
                 truncate_n_step = 1
                 while len(self.last_transitions) > 0:
                     current_n_step = self.n_step - truncate_n_step
-                    self._add_n_step(n_step = current_n_step)
+                    self.add_n_step_transition(n_step = current_n_step)
                     truncate_n_step += 1
 
                 assert len(self.last_returns) == 0

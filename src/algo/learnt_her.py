@@ -53,12 +53,36 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         return good_attributes
 
     def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission):
-        self.current_episode.append(
-            self.transition(current_state, action, reward, next_state, terminal, mission, torch.LongTensor([mission.size(0)]))
-        )
 
+        # ============= Apply n-step and store transitions in temporary episode ====================
+        # ==========================================================================================
+
+        # Saving everything except reward and next_state
+        self.last_transitions.append((current_state, action, terminal, mission, mission_length))
+        self.last_returns.append(reward)
+        self.last_states.append(next_state)
+
+        # Implementation of n-step return
+        # The main idea is (almost-)invisible for the main algorithm, we just change the reward and the next state
+        # The reward is the cumulative return until n-1 and next_state is the state after n step
+        if len(self.last_states) >= self.n_step:
+            self.add_n_step_transition(self.n_step)
+
+            # If terminal, add all sample even if n_step is not available
+            if terminal:
+                truncate_n_step = 1
+                while len(self.last_transitions) > 0:
+                    current_n_step = self.n_step - truncate_n_step
+                    self.add_n_step_transition(n_step=current_n_step)
+                    truncate_n_step += 1
+
+                assert len(self.last_returns) == 0
+                assert len(self.last_transitions) == 0
+                self.last_states = []
+
+        # ==================== Deal with generator training and dataset ============================
+        # ==========================================================================================
         self.logger.log("gen/len_dataset", len(self.generator_dataset["states"]))
-
         # Number of sample in the generator dataset
         n_generator_example = len(self.generator_dataset['states'])
         # If there are enough training example, train the generator
@@ -66,6 +90,8 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             self._train_generator()
             self.generator_next_update += self.update_steps
 
+        # ============= Apply Hinsight Experience Replay by swapping a mission =====================
+        # ==========================================================================================
         if terminal:
             # Agent failed (reward <= 0), use the generator to compute the instruction performed by the agent
             if hindsight_mission and n_generator_example > self.n_sample_before_using_generator:
@@ -81,10 +107,8 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                     n_correct_attrib = self._cheat_check(true_mission=hindsight_mission,
                                                          generated_mission=generated_hindsight_mission)
 
-                    self.logger.add_scalar("gen/n_correct_attrib_gen", n_correct_attrib, self.generator_usage)
+                    self.logger.log("gen/n_correct_attrib_gen", n_correct_attrib, self.generator_usage)
                     self.generator_usage += 1
-
-
 
                 # Substitute the old mission with the new one, change the reward at the end of episode
                 hindsight_episode = []
@@ -172,8 +196,8 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             self.optimizer.step()
 
             if self.logger:
-                self.logger.add_scalar("gen_data/generator_loss", loss.detach().item(), self.n_update_generator)
-                self.logger.add_scalar("gen_data/generator_accuracy", accuracy, self.n_update_generator)
+                self.logger.add_scalar("gen/generator_loss", loss.detach().item(), self.n_update_generator)
+                self.logger.add_scalar("gen/generator_accuracy", accuracy, self.n_update_generator)
 
             self.n_update_generator += 1
             if np.mean(accuracies[-10:]) > self.accuracy_convergence:
