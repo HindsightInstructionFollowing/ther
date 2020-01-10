@@ -37,8 +37,11 @@ class BaseDoubleDQN(nn.Module):
                                              weight_decay=config["weight_decay"])
 
         self.batch_size = config["batch_size"]
-        self.gamma = config["gamma"]
         self.n_actions = env.action_space.n
+
+        # Setting gamma and configuring n-step estimations
+        config["experience_replay_config"]["n_step"] = config["n_step"]
+        config["experience_replay_config"]["gamma"] = config["gamma"]
 
         # Create replay buffer here
         if config["experience_replay_config"]["use_ther"]:
@@ -127,6 +130,7 @@ class BaseDoubleDQN(nn.Module):
         batch_terminal = torch.as_tensor(batch_transitions.terminal, dtype=torch.int32, device=self.device)
         batch_action = torch.as_tensor(batch_transitions.action, dtype=torch.long, device=self.device).reshape(-1, 1)
         batch_mission_length = torch.cat(batch_transitions.mission_length).to(self.device)
+        batch_gamma = torch.cat(batch_transitions.gamma).to(self.device) # For n-step gamma might vary a bit
 
         batch_mission = nn.utils.rnn.pad_sequence(sequences=batch_transitions.mission,
                                                   batch_first=True,
@@ -151,8 +155,7 @@ class BaseDoubleDQN(nn.Module):
 
             args_actions = q_values.max(1)[1].reshape(-1, 1)
             targets[batch_terminal == 0] = targets[batch_terminal == 0] \
-                                       + self.gamma \
-                                       * q_values_next_state.gather(1, args_actions).detach()
+                                       + batch_gamma * q_values_next_state.gather(1, args_actions).detach()
 
         targets = targets.reshape(-1)
 

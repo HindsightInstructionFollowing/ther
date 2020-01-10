@@ -176,7 +176,6 @@ class MinigridRecurrentPolicy(nn.Module):
                                                                                   batch_first=True,
                                                                                   enforce_sorted=False)
 
-
         if ht is None:
             ht = torch.zeros(1, n_sequence, self.memory_size*2).to(self.device)
 

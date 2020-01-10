@@ -10,6 +10,8 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
         config = config["ther_params"]
 
+        assert config["n_step"] == 1, "Not available yet"
+
         # Force to take the last obs, not state
         input_shape = list(input_shape)
         input_shape[0] = 3

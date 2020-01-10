@@ -1,0 +1,10 @@
+{
+  "name" : "target_up10000",
+
+  "algo_params": {
+    "update_target_every" : 10000
+  }
+}
+
+
+

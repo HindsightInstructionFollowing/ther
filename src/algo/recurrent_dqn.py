@@ -4,15 +4,11 @@ from torch import nn
 import torch.nn.functional as F
 
 import random
+import copy
 
 class RecurrentDQN(BaseDoubleDQN):
     def __init__(self, env, config, logger=None, visualizer=None, test_env=None, device='cpu'):
         super().__init__(env=env, test_env=test_env, config=config, logger=logger, visualizer=visualizer, device=device)
-
-        self.bppt_size = config["max_bptt"]
-
-        self.burn_in = config["burn_in"] #0 # Hard since sequences can be super short in minigrid and vizdoom
-        assert self.burn_in == 0, "Not available at the moment"
 
         self.fuse_text_before_memory = True
 
@@ -25,24 +21,30 @@ class RecurrentDQN(BaseDoubleDQN):
         self.current_epsilon = max(self.epsilon_init - self.total_steps * (self.epsilon_init - self.epsilon_min)
                                    / self.step_exploration, self.epsilon_min)
 
+        state["max_sequence_length"] = 1
+        state["state_sequence_lengths"] = torch.ones(1).to(self.device)
+        state["padding_mask"] = torch.ones(1).to(self.device)
+
         if random.random() < self.current_epsilon:
             action = random.choice(range(self.n_actions))
 
             # Compute ht for next environment step
-            q_values, new_ht = self.policy_net(state, ht, seq_len=1)
+            q_values, new_ht = self.policy_net(state, ht)
             q_values = q_values.detach().cpu().numpy()[0]
         else:
-            q_values, new_ht = self.policy_net(state, ht, seq_len=1)
+            q_values, new_ht = self.policy_net(state, ht)
             q_values = q_values.detach().cpu().numpy()[0]
             action = int(q_values.argmax())
 
         self.total_steps += 1
-        return action, q_values, new_ht
+        return action, q_values, new_ht.detach()
 
     def preprocess_state_sequences(self, transitions):
         """
         Subsample, pad and batch states
         """
+
+        transitions = copy.deepcopy(transitions)
 
         max_length = len(max(transitions, key=lambda x:len(x)))
         batch_dict = {
@@ -59,21 +61,23 @@ class RecurrentDQN(BaseDoubleDQN):
         }
 
         for state_sequences in transitions:
-
             seq_length = len(state_sequences)
             padding_length = max_length - seq_length
             mask = [1 for i in range(max_length)]
 
             if padding_length > 0:
-                dummy_transition = [self.replay_buffer.transition(current_state=self.state_padding,
+                dummy_transition = self.replay_buffer.transition(current_state=self.state_padding,
                                                                   action=self.action_padding,
                                                                   reward=0,
                                                                   next_state=self.state_padding,
                                                                   terminal=self.terminal_padding,
                                                                   mission_length=state_sequences[0].mission_length,
                                                                   mission=state_sequences[0].mission
-                                                                  )]
-                state_sequences.extend(dummy_transition * padding_length)
+                                                                  )
+
+                for new_t in range(padding_length):
+                    state_sequences.append(copy.deepcopy(dummy_transition))
+
                 mask[seq_length:] = [0 for _ in range(padding_length)]
 
 
@@ -91,6 +95,7 @@ class RecurrentDQN(BaseDoubleDQN):
 
         assert len(batch_dict["padding_mask"]) == len(batch_dict["mission"])
         assert len(batch_dict["padding_mask"]) == len(batch_dict["state"])
+
 
         return batch_dict
 
@@ -112,11 +117,11 @@ class RecurrentDQN(BaseDoubleDQN):
         # Sample from the memory replay
         transitions = self.replay_buffer.sample(self.batch_size)
 
-        batch_dict = self.preprocess_state_sequences(transitions=transitions)
+        batch_dict = self.preprocess_state_sequences(transitions)
 
         # Padding mask corresponding to real transitions and fake padded one to allows for the lstm computation
-        batch_mask = torch.LongTensor(batch_dict["padding_mask"]).to(self.device)
-        batch_sequence_length = torch.LongTensor(batch_dict["state_sequence_lengths"]).to(self.device)
+        batch_mask = torch.LongTensor(batch_dict["padding_mask"])
+        batch_sequence_length = torch.LongTensor(batch_dict["state_sequence_lengths"])
 
         batch_curr_state = torch.cat(batch_dict["state"]).to(device=self.device)
         batch_next_state = torch.cat(batch_dict["next_state"]).to(device=self.device)
@@ -128,9 +133,8 @@ class RecurrentDQN(BaseDoubleDQN):
         batch_mission_length = torch.cat(batch_dict["mission_length"]).to(self.device)
 
         # Convert to torch and remove padding since it's not useful for those variables
-        batch_terminal = torch.as_tensor(batch_dict["terminal"], dtype=torch.int32)[batch_mask == 1].to(self.device)
-        batch_action = torch.as_tensor(batch_dict["action"], dtype=torch.long)[batch_mask == 1].to(self.device).reshape(-1, 1)
-
+        batch_terminal = torch.as_tensor(batch_dict["terminal"], dtype=torch.int32)[batch_mask == 1]
+        batch_action = torch.LongTensor(batch_dict["action"])[batch_mask == 1].view(-1, 1).to(device=self.device)
 
         #============= Computing targets ===========
         #===========================================
@@ -258,7 +262,7 @@ if __name__ == "__main__" :
     },
 
     "n_parallel_env" : 1,
-    "batch_size" : 3,
+    "batch_size" : 64,
     "lr" : 1e-5,
     "gamma" : 0.99,
     "update_target_every" : 2000,
