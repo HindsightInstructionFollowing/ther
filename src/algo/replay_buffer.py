@@ -129,10 +129,15 @@ class ReplayMemory(AbstractReplay):
 
             # Substitute the old mission with the new one, change the reward too
             hindsight_episode = []
-            for st, a, wrong_reward, st_plus1, end_ep, wrong_mission, length, gamma in self.current_episode:
+            len_episode = len(self.current_episode)
+            for step, (st, a, wrong_reward, st_plus1, end_ep, wrong_mission, length, gamma) in enumerate(self.current_episode):
+                if step >= len_episode - self.n_step:
+                    hindsight_reward = 1 * self.gamma**(len(self.current_episode) - step - 1)
+                else:
+                    hindsight_reward = 0
                 hindsight_episode.append(self.transition(current_state=st,
                                                          action=a,
-                                                         reward=self.hindsight_reward if end_ep else 0,
+                                                         reward=hindsight_reward,
                                                          next_state=st_plus1,
                                                          terminal=end_ep,
                                                          mission=torch.LongTensor(hindsight_mission),
@@ -209,7 +214,7 @@ if __name__ == "__main__":
     config = {"hindsight_reward": 1,
               "size": 10,
               "use_her": True,
-              "n_step": 2,
+              "n_step": 4,
               "gamma" : 0.99}
 
     # %%
@@ -217,13 +222,13 @@ if __name__ == "__main__":
     buffer = RecurrentReplayBuffer(config)
 
     mission = ["nik tout"]
-    action = 0
+    action = 2
     reward = 0
     for elem in range(1, 20):
         done = False
         hindsight_mission = None
         reward = 0
-        if elem % 3 == 0:
+        if elem % 5 == 0:
             print("done")
             done = True
             hindsight_mission = [1, 0]
