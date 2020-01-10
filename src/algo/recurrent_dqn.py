@@ -57,6 +57,7 @@ class RecurrentDQN(BaseDoubleDQN):
             "terminal" :               [],
             "action" :                 [],
             "reward" :                 [],
+            "gamma" :                  [],
             "max_sequence_length" : max_length
         }
 
@@ -67,13 +68,14 @@ class RecurrentDQN(BaseDoubleDQN):
 
             if padding_length > 0:
                 dummy_transition = self.replay_buffer.transition(current_state=self.state_padding,
-                                                                  action=self.action_padding,
-                                                                  reward=0,
-                                                                  next_state=self.state_padding,
-                                                                  terminal=self.terminal_padding,
-                                                                  mission_length=state_sequences[0].mission_length,
-                                                                  mission=state_sequences[0].mission
-                                                                  )
+                                                                 action=self.action_padding,
+                                                                 reward=0,
+                                                                 next_state=self.state_padding,
+                                                                 terminal=self.terminal_padding,
+                                                                 mission_length=state_sequences[0].mission_length,
+                                                                 mission=state_sequences[0].mission,
+                                                                 gamma=0
+                                                                 )
 
                 for new_t in range(padding_length):
                     state_sequences.append(copy.deepcopy(dummy_transition))
@@ -91,6 +93,7 @@ class RecurrentDQN(BaseDoubleDQN):
             batch_dict["mission"].extend(       state_sequences_transitions.mission)
             batch_dict["mission_length"].extend(state_sequences_transitions.mission_length)
             batch_dict["reward"].extend(        state_sequences_transitions.reward)
+            batch_dict["gamma"].extend(         state_sequences_transitions.gamma)
             batch_dict["padding_mask"].extend(                              mask)
 
         assert len(batch_dict["padding_mask"]) == len(batch_dict["mission"])
@@ -133,8 +136,9 @@ class RecurrentDQN(BaseDoubleDQN):
         batch_mission_length = torch.cat(batch_dict["mission_length"]).to(self.device)
 
         # Convert to torch and remove padding since it's not useful for those variables
-        batch_terminal = torch.as_tensor(batch_dict["terminal"], dtype=torch.int32)[batch_mask == 1]
+        batch_terminal = torch.as_tensor(batch_dict["terminal"], dtype=torch.int32)[batch_mask == 1].to(self.device)
         batch_action = torch.LongTensor(batch_dict["action"])[batch_mask == 1].view(-1, 1).to(device=self.device)
+        batch_gamma = torch.FloatTensor(batch_dict["gamma"])[batch_mask == 1].view(-1, 1).to(device=self.device)
 
         #============= Computing targets ===========
         #===========================================
@@ -159,8 +163,7 @@ class RecurrentDQN(BaseDoubleDQN):
 
         args_actions = q_values_for_action.max(1)[1].reshape(-1, 1)
         targets[batch_terminal == 0] = targets[batch_terminal == 0] \
-                                      + self.gamma \
-                                      * q_values_next_state.gather(1, args_actions).detach()
+                                      + batch_gamma[batch_terminal == 0] * q_values_next_state.gather(1, args_actions).detach()
 
         targets = targets.reshape(-1)
 
