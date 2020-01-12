@@ -54,8 +54,6 @@ class BaseDoubleDQN(nn.Module):
                                                             logger=logger
                                                             )
 
-            assert config["architecture"] != "conv_lstm", "Recurrent THER not available at the moment, sorry !"
-
         elif config["architecture"] == "conv_lstm":
             replay_buffer = RecurrentReplayBuffer(config=config["experience_replay_config"])
         else:
