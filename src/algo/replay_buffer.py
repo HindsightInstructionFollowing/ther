@@ -30,9 +30,10 @@ class AbstractReplay(ABC):
 
         self.n_step = config["n_step"]
 
-        self.last_returns = []
-        self.last_states = []
-        self.last_transitions = []
+        self.last_terminal = [] # Logging done or terminal (end of episode)
+        self.last_returns = [] # Logging rewards (return)
+        self.last_states = [] # Logging next states
+        self.last_transitions = [] # Logging rest of the transitions (current_state, action etc ...)
 
         self.gamma = config["gamma"]
         self.gamma_array = np.array([self.gamma**i for i in range(self.n_step)])
@@ -55,9 +56,11 @@ class AbstractReplay(ABC):
         self.position += len_episode
 
     def add_n_step_transition(self, n_step):
-        current_state, action, terminal, mission, mission_length = self.last_transitions[0]
+        current_state, action, mission, mission_length = self.last_transitions[0]
+
         sum_return = np.sum(self.last_returns[:n_step] * self.gamma_array[:n_step])
         n_step_state = self.last_states[n_step - 1]
+        terminal = self.last_terminal[n_step -1]
 
         self.current_episode.append(
             self.transition(current_state=current_state, action=action, reward=sum_return, next_state=n_step_state,
@@ -66,6 +69,7 @@ class AbstractReplay(ABC):
         )
 
         # Clean
+        self.last_terminal.pop(0)
         self.last_returns.pop(0)
         self.last_states.pop(0)
         self.last_transitions.pop(0)
@@ -99,7 +103,8 @@ class ReplayMemory(AbstractReplay):
         # ==========================================================================================
 
         # Saving everything except reward and next_state
-        self.last_transitions.append((current_state, action, terminal, mission, mission_length))
+        self.last_transitions.append((current_state, action, mission, mission_length))
+        self.last_terminal.append(terminal)
         self.last_returns.append(reward)
         self.last_states.append(next_state)
 
@@ -117,6 +122,7 @@ class ReplayMemory(AbstractReplay):
                     self.add_n_step_transition(n_step = current_n_step)
                     truncate_n_step += 1
 
+                assert len(self.last_terminal) == 0
                 assert len(self.last_returns) == 0
                 assert len(self.last_transitions) == 0
                 self.last_states = []
@@ -212,7 +218,7 @@ class RecurrentReplayBuffer(ReplayMemory):
 
 if __name__ == "__main__":
     config = {"hindsight_reward": 1,
-              "size": 10,
+              "size": 11,
               "use_her": True,
               "n_step": 4,
               "gamma" : 0.99}
