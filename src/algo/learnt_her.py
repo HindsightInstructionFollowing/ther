@@ -1,4 +1,4 @@
-from algo.replay_buffer import AbstractReplay
+from algo.replay_buffer import AbstractReplay, RecurrentReplayBuffer
 from algo.neural_architecture import InstructionGenerator, compute_accuracy
 import numpy as np
 import torch
@@ -24,6 +24,8 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         self.n_sample_before_using_generator = config["n_sample_before_using_generator"]
         self.batch_size =                      config["batch_size"]
         self.accuracy_convergence =            config["accuracy_convergence"] # Accuracy before generator is considered good
+        self.max_update_generator_per_epochs = config["max_update_per_epochs"]
+
         self.padding_value =                   2 # By convention, checked by Word2Idx in wrappers.py
         self.n_update_generator =              0 # Number of optim steps done on generator
         self.generator_usage =                 0 # Number of time a sequence has been relabeled
@@ -56,7 +58,8 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         # ==========================================================================================
 
         # Saving everything except reward and next_state
-        self.last_transitions.append((current_state, action, terminal, mission, mission_length))
+        self.last_transitions.append((current_state, action, mission, mission_length))
+        self.last_terminal.append(terminal)
         self.last_returns.append(reward)
         self.last_states.append(next_state)
 
@@ -66,17 +69,18 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         if len(self.last_states) >= self.n_step:
             self.add_n_step_transition(self.n_step)
 
-            # If terminal, add all sample even if n_step is not available
-            if terminal:
-                truncate_n_step = 1
-                while len(self.last_transitions) > 0:
-                    current_n_step = self.n_step - truncate_n_step
-                    self.add_n_step_transition(n_step=current_n_step)
-                    truncate_n_step += 1
+        # If terminal, add all sample even if n_step is not available
+        if terminal:
+            truncate_n_step = 1
+            while len(self.last_transitions) > 0:
+                current_n_step = self.n_step - truncate_n_step
+                self.add_n_step_transition(n_step=current_n_step)
+                truncate_n_step += 1
 
-                assert len(self.last_returns) == 0
-                assert len(self.last_transitions) == 0
-                self.last_states = []
+            assert len(self.last_returns) == 0
+            assert len(self.last_transitions) == 0
+            assert len(self.last_terminal) == 0
+            self.last_states = []
 
         # ==================== Deal with generator training and dataset ============================
         # ==========================================================================================
@@ -105,7 +109,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                     n_correct_attrib = self._cheat_check(true_mission=hindsight_mission,
                                                          generated_mission=generated_hindsight_mission)
 
-                    self.logger.log("gen/n_correct_attrib_gen", n_correct_attrib, self.generator_usage)
+                    self.logger.log("gen/n_correct_attrib_gen", n_correct_attrib)
                     self.generator_usage += 1
 
                 # Substitute the old mission with the new one, change the reward at the end of episode
@@ -129,6 +133,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
     def _train_generator(self):
 
+        gen_update_this_epoch = 1
         convergence = False
         accuracies = []
         len_dataset = len(self.generator_dataset["states"])
@@ -193,15 +198,43 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             loss.backward()
             self.optimizer.step()
 
-            if self.logger:
+            if self.logger and gen_update_this_epoch % 1000 == 0:
                 self.logger.add_scalar("gen/generator_loss", loss.detach().item(), self.n_update_generator)
                 self.logger.add_scalar("gen/generator_accuracy", accuracy, self.n_update_generator)
 
             self.n_update_generator += 1
-            if np.mean(accuracies[-10:]) > self.accuracy_convergence:
+            gen_update_this_epoch += 1
+            del loss
+
+            if np.mean(accuracies[-10:]) > self.accuracy_convergence or gen_update_this_epoch > self.max_update_generator_per_epochs:
                 convergence = True
 
         print("Done training generator in {} steps\nLast accuracies : {}".format(self.n_update_generator, accuracies[-10:]))
+
+
+class LearntHindsightRecurrentExperienceReplay(LearntHindsightExperienceReplay):
+
+    def __init__(self, input_shape, n_output, config, device, logger=None):
+
+        self.len_sum = 0
+        super().__init__(input_shape=input_shape, n_output=n_output, config=config, device=device, logger=logger)
+
+        self.episode_length = np.zeros(self.memory_size)
+        self.transition_proba = np.zeros(self.memory_size)
+        self.last_position = 0
+
+
+    def _store_episode(self, episode_to_store):
+        RecurrentReplayBuffer._store_episode(self, episode_to_store)
+
+    def sample(self, batch_size):
+        return RecurrentReplayBuffer.sample(self, batch_size)
+
+    def __len__(self):
+        return int(self.len_sum)
+
+
+
 
 
 if __name__ == "__main__":

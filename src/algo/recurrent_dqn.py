@@ -158,12 +158,14 @@ class RecurrentDQN(BaseDoubleDQN):
         q_values_for_action, _ = self.policy_net(batch_next_state_non_terminal_dict)
         q_values_next_state, _ = self.target_net(batch_next_state_non_terminal_dict)
 
-        q_values_for_action = q_values_for_action[batch_terminal == 0]
-        q_values_next_state = q_values_next_state[batch_terminal == 0]
+        terminal_index = batch_terminal == 0
+
+        q_values_for_action = q_values_for_action[terminal_index]
+        q_values_next_state = q_values_next_state[terminal_index]
 
         args_actions = q_values_for_action.max(1)[1].reshape(-1, 1)
-        targets[batch_terminal == 0] = targets[batch_terminal == 0] \
-                                      + batch_gamma[batch_terminal == 0] * q_values_next_state.gather(1, args_actions).detach()
+        targets[terminal_index] = targets[terminal_index].view(-1) \
+                                      + batch_gamma[terminal_index] * q_values_next_state.gather(1, args_actions).view(-1).detach()
 
         targets = targets.reshape(-1)
 
@@ -179,6 +181,8 @@ class RecurrentDQN(BaseDoubleDQN):
         }
         predictions, _ = self.policy_net(batch_curr_state_dict)
         predictions = predictions.gather(1, batch_action).view(-1)
+
+        assert predictions.size(0) == batch_sequence_length.sum()
 
         # Loss
         loss = F.smooth_l1_loss(predictions, targets)
@@ -209,8 +213,8 @@ class RecurrentDQN(BaseDoubleDQN):
 
         # Log important info, see logging_helper => SweetLogger for more details
         if self.writer:
-            self.writer.log("percent_terminal", batch_terminal.sum().item() / self.batch_size)
-            self.writer.log("n_update_target", self.n_update_target)
+            self.writer.log("train/percent_terminal", batch_terminal.sum().item() / self.batch_size)
+            self.writer.log("train/n_update_target", self.n_update_target)
 
         return loss.detach().item()
 

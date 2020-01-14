@@ -1,5 +1,80 @@
 {
-  "name" : "vizdoom_more_explo_target8000_no_her",
+  "name" : "vizdoom_explo1e5_target1e4",
+  "algo" : "dqn",
+  "device" : "cuda",
+
+  "dump_log_every" : 10000,
+
+  "algo_params": {
+    "architecture" : "conv",
+    "architecture_params" : {
+      "conv_layers_channel" : [25, 50, 75],
+      "conv_layers_size" : [8,4,4],
+      "conv_layers_stride" : [4,2,1],
+      "max_pool_layers" : [0,0,0],
+
+      "use_gated_attention" : false,
+      "ignore_text" : false,
+      "use_lstm_after_conv" : false,
+      "rnn_text_hidden_size" : 128,
+      "fc_text_embedding_hidden" : 32,
+      "last_hidden_fc_size" : 64,
+      "dueling_architecture" : true,
+      "learn_text" : true,
+      "use_memory" : false
+    },
+
+    "experience_replay_config" : {
+      "hindsight_reward" : 1,
+      "size" : 100000,
+      "use_her" : false,
+      "prioritize" : false,
+      "use_ther" : false,
+      "ther_params" : {
+        "accuracy_convergence" : 0.9,
+        "lr" : 3e-4,
+        "batch_size" : 64,
+        "weight_decay" : 1e-4,
+        "update_steps": [100,300,1000],
+        "n_sample_before_using_generator" : 300,
+        "max_update_per_epochs" : 20000,
+
+        "architecture_params": {
+          "conv_layers_channel" : [25, 50, 75],
+          "conv_layers_size" : [8,4,4],
+          "conv_layers_stride" : [4,2,1],
+          "max_pool_layers" : [0,0,0],
+          "embedding_dim" : 32,
+          "generator_max_len" : 10
+
+        }
+      }
+    },
+
+    "n_parallel_env" : 1,
+    "batch_size" : 128,
+    "lr" : 1e-5,
+    "replay_buffer_size" : 40000,
+    "gamma" : 0.99,
+    "update_target_every" : 10000,
+    "step_exploration" : 100000,
+    "weight_decay" : 1e-5,
+    "use_her" : false
+  },
+
+  "wrappers_model" : [
+    {"name" : "MinigridTorchWrapper", "params" : {"device" : "cuda"}}
+  ]
+
+}
+
+
+
+
+
+
+
+{
   "algo" : "dqn",
   "device" : "cuda",
 
@@ -17,27 +92,14 @@
       "dueling_architecture" : true,
       "learn_text" : true,
       "use_memory" : false,
-      "conv_layers_channel" : [25, 50, 75],
-      "conv_layers_size" : [8,4,4],
-      "conv_layers_stride" : [4,2,1],
-      "max_pool_layers" : [0,0,0]
+
     },
 
-    "n_parallel_env" : 1,
-    "batch_size" : 128,
-    "lr" : 1e-5,
-    "replay_buffer_size" : 40000,
-    "gamma" : 0.99,
-    "update_target_every" : 8000,
-    "step_exploration" : 100000,
-    "weight_decay" : 1e-5,
-    "use_her" : false
+
 
   },
 
-  "wrappers_model" : [
-    {"name" : "MinigridTorchWrapper", "params" : {"device" : "cuda"}}
-  ]
+
 
 }
 

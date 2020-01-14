@@ -36,7 +36,7 @@ class AbstractReplay(ABC):
         self.last_transitions = [] # Logging rest of the transitions (current_state, action etc ...)
 
         self.gamma = config["gamma"]
-        self.gamma_array = np.array([self.gamma**i for i in range(self.n_step)])
+        self.gamma_array = np.array([self.gamma**i for i in range(self.n_step+1)])
 
     def sample(self, batch_size):
         return random.sample(self.memory[:self.n_episodes], batch_size)
@@ -58,14 +58,21 @@ class AbstractReplay(ABC):
     def add_n_step_transition(self, n_step):
         current_state, action, mission, mission_length = self.last_transitions[0]
 
+        # Not enough samples to apply full n-step, aborting this step
+        if len(self.last_returns) < n_step:
+            return
+
         sum_return = np.sum(self.last_returns[:n_step] * self.gamma_array[:n_step])
         n_step_state = self.last_states[n_step - 1]
-        terminal = self.last_terminal[n_step -1]
+        last_terminal = self.last_terminal[n_step -1]
+
+        if not last_terminal:
+            assert sum_return == 0
 
         self.current_episode.append(
             self.transition(current_state=current_state, action=action, reward=sum_return, next_state=n_step_state,
-                            terminal=terminal, mission=mission, mission_length=mission_length,
-                            gamma=self.gamma_array[n_step-1]**n_step)
+                            terminal=last_terminal, mission=mission, mission_length=mission_length,
+                            gamma=self.gamma_array[n_step])
         )
 
         # Clean
@@ -114,18 +121,18 @@ class ReplayMemory(AbstractReplay):
         if len(self.last_states) >= self.n_step:
             self.add_n_step_transition(self.n_step)
 
-            # If terminal, add all sample even if n_step is not available
-            if terminal:
-                truncate_n_step = 1
-                while len(self.last_transitions) > 0:
-                    current_n_step = self.n_step - truncate_n_step
-                    self.add_n_step_transition(n_step = current_n_step)
-                    truncate_n_step += 1
+        # If terminal, add all sample even if n_step is not available
+        if terminal:
+            truncate_n_step = 1
+            while len(self.last_transitions) > 0:
+                current_n_step = self.n_step - truncate_n_step
+                self.add_n_step_transition(n_step = current_n_step)
+                truncate_n_step += 1
 
-                assert len(self.last_terminal) == 0
-                assert len(self.last_returns) == 0
-                assert len(self.last_transitions) == 0
-                self.last_states = []
+            assert len(self.last_terminal) == 0
+            assert len(self.last_returns) == 0
+            assert len(self.last_transitions) == 0
+            self.last_states = []
 
         # ============= Apply Hinsight Experience Replay by swapping a mission =====================
         # ==========================================================================================

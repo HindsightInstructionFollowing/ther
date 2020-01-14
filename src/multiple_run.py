@@ -17,7 +17,6 @@ if __name__ == "__main__":
 
     parser.add_argument("-multiple_ext_config", type=str)
     parser.add_argument("-multiple_run_config", type=str)
-    parser.add_argument("-run_dir", type=str)
 
     parser.add_argument("-n_gpus", type=int, default=4)
     parser.add_argument("-n_seeds", type=int, default=1)

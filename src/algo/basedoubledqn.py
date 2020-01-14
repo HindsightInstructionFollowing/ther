@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 from algo.neural_architecture import MinigridConvPolicy, MlpNet, MinigridRecurrentPolicy
 from algo.replay_buffer import ReplayMemory, RecurrentReplayBuffer
-from algo.learnt_her import LearntHindsightExperienceReplay
+from algo.learnt_her import LearntHindsightExperienceReplay, LearntHindsightRecurrentExperienceReplay
 
 import time
 
@@ -47,17 +47,28 @@ class BaseDoubleDQN(nn.Module):
         if config["experience_replay_config"]["use_ther"]:
             input_shape = env.observation_space["image"].shape[-3:] # todo : input shape check, because of framestacking etc...
             vocabulary_size = int(env.observation_space["mission"].high.max())
-            replay_buffer = LearntHindsightExperienceReplay(input_shape=input_shape,
-                                                            n_output=vocabulary_size,
-                                                            config=config["experience_replay_config"],
-                                                            device=device,
-                                                            logger=logger
-                                                            )
 
-        elif config["architecture"] == "conv_lstm":
-            replay_buffer = RecurrentReplayBuffer(config=config["experience_replay_config"])
+            if config["architecture"] == "conv_lstm":
+                replay_buffer = LearntHindsightRecurrentExperienceReplay(input_shape=input_shape,
+                                                                         n_output=vocabulary_size,
+                                                                         config=config["experience_replay_config"],
+                                                                         device=device,
+                                                                         logger=logger
+                                                                         )
+            else:
+                replay_buffer = LearntHindsightExperienceReplay(input_shape=input_shape,
+                                                                n_output=vocabulary_size,
+                                                                config=config["experience_replay_config"],
+                                                                device=device,
+                                                                logger=logger
+                                                                )
+
+
         else:
-            replay_buffer = ReplayMemory(config=config["experience_replay_config"])
+            if config["architecture"] == "conv_lstm":
+                replay_buffer = RecurrentReplayBuffer(config=config["experience_replay_config"])
+            else:
+                replay_buffer = ReplayMemory(config=config["experience_replay_config"])
 
         self.replay_buffer = replay_buffer
 
@@ -128,7 +139,7 @@ class BaseDoubleDQN(nn.Module):
         batch_terminal = torch.as_tensor(batch_transitions.terminal, dtype=torch.int32, device=self.device)
         batch_action = torch.as_tensor(batch_transitions.action, dtype=torch.long, device=self.device).reshape(-1, 1)
         batch_mission_length = torch.cat(batch_transitions.mission_length).to(self.device)
-        batch_gamma = torch.cat(batch_transitions.gamma).to(self.device) # For n-step gamma might vary a bit
+        batch_gamma = torch.FloatTensor(batch_transitions.gamma).to(self.device) # For n-step gamma might vary a bit
 
         batch_mission = nn.utils.rnn.pad_sequence(sequences=batch_transitions.mission,
                                                   batch_first=True,
@@ -147,13 +158,16 @@ class BaseDoubleDQN(nn.Module):
 
         # Double DQN
         if torch.sum(batch_terminal) != self.batch_size:
+            terminal_index = batch_terminal == 0
+            assert targets[terminal_index].sum() == 0
+
             # Selection of the action with the policy net
             q_values, _, _ = self.policy_net(batch_next_state_non_terminal_dict)
             q_values_next_state, _, _ = self.target_net(batch_next_state_non_terminal_dict)
 
             args_actions = q_values.max(1)[1].reshape(-1, 1)
-            targets[batch_terminal == 0] = targets[batch_terminal == 0] \
-                                       + batch_gamma * q_values_next_state.gather(1, args_actions).detach()
+            targets[terminal_index,0] = targets[terminal_index].view(-1) \
+                                       + batch_gamma[terminal_index] * q_values_next_state.gather(1, args_actions).view(-1).detach()
 
         targets = targets.reshape(-1)
 

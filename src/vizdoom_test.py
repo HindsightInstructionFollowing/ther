@@ -16,7 +16,7 @@ class AttrDict(dict):
 
 #%%
 
-params = json.load(open("config/env/vizdoom.json", 'r'))
+params = json.load(open("config/env/vizdoom_easy.json", 'r'))
 args = AttrDict(params["env_params"])
 
 env = grounding_env.GroundingEnv(args)

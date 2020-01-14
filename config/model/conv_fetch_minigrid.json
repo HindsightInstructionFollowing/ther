@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_fetch_dueling_double_dqn_default",
+  "name" : "minigrid_fetch_dddqn_frame_stacking_up20000_exp40000_buffer1e5_nstep6",
   "algo" : "dqn",
   "device" : "cuda",
 
@@ -8,6 +8,7 @@
   "algo_params": {
     "architecture" : "conv",
     "architecture_params" : {
+      "use_gated_attention" : false,
       "ignore_text" : false,
       "use_lstm_after_conv" : false,
       "rnn_text_hidden_size" : 128,
@@ -20,7 +21,7 @@
 
     "experience_replay_config" : {
       "hindsight_reward" : 1,
-      "size" : 40000,
+      "size" : 100000,
       "use_her" : false,
       "prioritize" : false,
       "use_ther" : false,
@@ -31,9 +32,10 @@
         "weight_decay" : 1e-4,
         "update_steps": [100,300,1000],
         "n_sample_before_using_generator" : 300,
+        "max_update_per_epochs" : 2000,
 
         "architecture_params": {
-          "conv_layers_channel" : [16,32,64],
+          "conv_layers_channel" : [20,36,70],
           "conv_layers_size" : [2,2,2],
           "conv_layers_stride" : [1,1,1],
           "max_pool_layers" : [2,0,0],
@@ -48,14 +50,16 @@
     "batch_size" : 128,
     "lr" : 1e-5,
     "gamma" : 0.99,
-    "update_target_every" : 10000,
-    "step_exploration" : 20000,
+    "n_step" : 6,
+    "update_target_every" : 20000,
+    "step_exploration" : 40000,
     "weight_decay" : 0
   },
 
   "wrappers_model" : [
     {"name" : "RemoveUselessChannelWrapper", "params" : {}},
     {"name" : "RemoveUselessActionWrapper", "params" : {}},
+    {"name" : "FrameStackerWrapper", "params" : {"n_stack" : 4, "create_dim" :  false}},
     {"name" : "MinigridTorchWrapper", "params" : {"device" : "cuda"}}
   ]
 
