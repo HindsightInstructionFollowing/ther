@@ -134,6 +134,7 @@ def load_config(env_config_file, model_config_file, seed,
     del full_config["name"]
 
     # set seed
+    full_config["seed"] = seed
     set_seed(seed)
     path_to_expe = os.path.join(model_path, str(seed))
 
@@ -207,7 +208,7 @@ def set_seed(seed):
         print('Using seed {}'.format(seed))
         np.random.seed(seed)
         torch.manual_seed(seed)
-        # random.seed(seed)
+        random.seed(seed)
     else:
         raise NotImplementedError("Cannot set negative seed")
 

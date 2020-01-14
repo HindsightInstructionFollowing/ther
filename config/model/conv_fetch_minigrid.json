@@ -1,9 +1,9 @@
 {
-  "name" : "minigrid_fetch_dddqn_frame_stacking_up20000_exp40000_buffer1e5_nstep6",
+  "name" : "minigrid_fetch_dddqn_frame_stacking_up20000_exp40000_buffer1e5_nstep3",
   "algo" : "dqn",
   "device" : "cuda",
 
-  "dump_log_every" : 10000,
+  "dump_log_every" : 30000,
 
   "algo_params": {
     "architecture" : "conv",
@@ -30,7 +30,7 @@
         "lr" : 3e-4,
         "batch_size" : 64,
         "weight_decay" : 1e-4,
-        "update_steps": [100,300,1000],
+        "update_steps": 100,
         "n_sample_before_using_generator" : 300,
         "max_update_per_epochs" : 2000,
 
@@ -50,7 +50,7 @@
     "batch_size" : 128,
     "lr" : 1e-5,
     "gamma" : 0.99,
-    "n_step" : 6,
+    "n_step" : 3,
     "update_target_every" : 20000,
     "step_exploration" : 40000,
     "weight_decay" : 0

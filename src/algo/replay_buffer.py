@@ -104,6 +104,11 @@ class ReplayMemory(AbstractReplay):
 
         If hindsight mission is provided (terminal == True is needed)
         The current episode is stored alongside a new one with the substitued mission
+
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        HER works only if the reward is sparse and provided at the end of the episode
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
         """
 
         # ============= Apply n-step and store transitions in temporary episode ====================

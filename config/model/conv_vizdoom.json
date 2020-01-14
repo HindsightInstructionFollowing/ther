@@ -35,7 +35,7 @@
         "lr" : 3e-4,
         "batch_size" : 64,
         "weight_decay" : 1e-4,
-        "update_steps": [100,300,1000],
+        "update_steps": 100,
         "n_sample_before_using_generator" : 300,
         "max_update_per_epochs" : 20000,
 

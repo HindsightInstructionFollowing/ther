@@ -164,8 +164,8 @@ class RecurrentDQN(BaseDoubleDQN):
         q_values_next_state = q_values_next_state[terminal_index]
 
         args_actions = q_values_for_action.max(1)[1].reshape(-1, 1)
-        targets[terminal_index] = targets[terminal_index].view(-1) \
-                                      + batch_gamma[terminal_index] * q_values_next_state.gather(1, args_actions).view(-1).detach()
+        targets[terminal_index, 0] = targets[terminal_index].view(-1) \
+                                      + batch_gamma[terminal_index].view(-1) * q_values_next_state.gather(1, args_actions).view(-1).detach()
 
         targets = targets.reshape(-1)
 

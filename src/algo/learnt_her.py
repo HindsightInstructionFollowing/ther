@@ -114,11 +114,15 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
                 # Substitute the old mission with the new one, change the reward at the end of episode
                 hindsight_episode = []
-                for st, a, wrong_reward, st_plus1, end_ep, wrong_mission, length in self.current_episode:
-                    hindsight_reward = self.hindsight_reward if end_ep else 0
+                len_episode = len(self.current_episode)
+                for step, (st, a, wrong_reward, st_plus1, end_ep, wrong_mission, length, gamma) in self.current_episode:
+                    if step >= len_episode - self.n_step:
+                        hindsight_reward = 1 * self.gamma ** (len(self.current_episode) - step - 1)
+                    else:
+                        hindsight_reward = 0
                     len_mission = torch.LongTensor([len(generated_hindsight_mission)])
                     hindsight_episode.append(
-                        self.transition(st, a, hindsight_reward, st_plus1, end_ep, generated_hindsight_mission, len_mission)
+                        self.transition(st, a, hindsight_reward, st_plus1, end_ep, generated_hindsight_mission, len_mission, gamma)
                     )
                 self._store_episode(hindsight_episode)
 

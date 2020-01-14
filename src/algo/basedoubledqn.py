@@ -159,7 +159,7 @@ class BaseDoubleDQN(nn.Module):
         # Double DQN
         if torch.sum(batch_terminal) != self.batch_size:
             terminal_index = batch_terminal == 0
-            assert targets[terminal_index].sum() == 0
+            #assert targets[terminal_index].sum() == 0
 
             # Selection of the action with the policy net
             q_values, _, _ = self.policy_net(batch_next_state_non_terminal_dict)

@@ -23,8 +23,15 @@ from env_utils import create_doom_env, AttrDict
 
 import ray
 
-#@ray.remote(num_gpus=0.24)
+@ray.remote(num_gpus=0.24)
 def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_test):
+
+    # Setting up context, when using a headless server, xvfbwrapper might be necessary
+    # if not local_test:
+    #     import xvfbwrapper
+    #     display = xvfbwrapper.Xvfb(width=128, height=128, colordepth=16)
+    # else:
+    display = open("empty_context.txt", "r")
 
     # =================== CONFIGURATION==================
     # ===================================================
@@ -33,14 +40,7 @@ def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_t
                                          env_config_file=env_config,
                                          out_dir=exp_dir,
                                          seed=seed)
-
-    # Setting up context, when using a headless server, xvfbwrapper might be necessary
-    if not local_test:
-        import xvfbwrapper
-        display = xvfbwrapper.Xvfb(width=128, height=128, colordepth=16)
-    else:
-        display = open("empty_context.txt", "r")
-
+    if local_test:
         # Override GPU context, switch to CPU on local machine
         full_config["device"] = 'cpu'
         wrapper_gpu = {"name": "MinigridTorchWrapper", "params": {"device": "cuda"}}
@@ -76,20 +76,27 @@ def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_t
         env_creator = lambda : FetchAttrEnv(size=env_params["size"],
                                             numObjs=env_params["numObjs"],
                                             missions_file_str=env_params["missions_file_str"],
-                                            single_mission=env_params["single_mission"])
+                                            single_mission=env_params["single_mission"],
+                                            seed=full_config["seed"])
 
         if "env_test" in full_config:
             test_env_creator = lambda : FetchAttrEnv(size=env_params["size"],
                                                      numObjs=env_params["numObjs"],
                                                      missions_file_str=full_config["env_test"]["missions_file_str"],
                                                      n_step_between_test=full_config["env_test"]["n_step_between_test"],
-                                                     n_step_test=full_config["env_test"]["n_step_test"]
+                                                     n_step_test=full_config["env_test"]["n_step_test"],
+                                                     seed=full_config["seed"]
                                                      )
 
 
     elif full_config["env_type"] == "vizdoom":
         args = AttrDict(full_config["env_params"])
         env_creator = lambda : create_doom_env(args)
+        if "env_test" in full_config:
+            test_env_creator = lambda : create_doom_env(args)
+
+
+
     else:
         env_params = full_config["env_params"]
         env_creator = lambda: FetchAttrDictLoaded(size=env_params["size"],
