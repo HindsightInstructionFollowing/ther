@@ -276,8 +276,6 @@ class BaseDoubleDQN(nn.Module):
 
     def train(self, n_env_iter, visualizer=None, display=None):
 
-        if not display:
-            display = open("empty_context.txt", 'w')
         self.environment_step = 1
         episode_num = 1
 

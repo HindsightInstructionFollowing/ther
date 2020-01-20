@@ -129,7 +129,7 @@ class GroundingEnv(gym.core.Env):
         screen_buf = process_screen(screen, self.params.frame_height,
                                     self.params.frame_width)
 
-        state = (screen_buf, self.mission)
+        state = (screen_buf, self.mission, None)
         reward = self.get_reward()
         is_final = False
         extra_args = None
@@ -167,11 +167,27 @@ class GroundingEnv(gym.core.Env):
         is_final = True if self.time == self.params.max_episode_length \
             or reward != self.params.living_reward else False
 
+        hindsight_mission = None
+        if reward == WRONG_OBJECT_REWARD:
+            for i, object_location in enumerate(self.object_coordinates):
+                if i == self.correct_location:
+                    continue
+                dist = get_l2_distance(self.agent_x, self.agent_y,
+                                       object_location.x, object_location.y)
+                if dist <= REWARD_THRESHOLD_DISTANCE:
+                    wrong_obj = self.get_objects_info()[i]
+                    hindsight_mission = "Go to the"
+                    if wrong_obj.relative_size is not None:
+                        hindsight_mission += ' {}'.format(wrong_obj.relative_size.lower())
+
+                    hindsight_mission += " {} {}".format(wrong_obj.color.lower(),wrong_obj.type.lower())
+                    break
+
         screen = self.game.get_state().screen_buffer
         screen_buf = process_screen(
             screen, self.params.frame_height, self.params.frame_width)
 
-        state = (screen_buf, self.mission)
+        state = (screen_buf, self.mission, hindsight_mission)
 
         return state, reward, is_final, None
 
@@ -360,7 +376,7 @@ class GroundingEnv(gym.core.Env):
         return instruction, instruction_id
 
     def get_word_to_idx(self):
-        word_to_idx = {}
+        word_to_idx = dict([("<BEG>",0), ("<END>",1) , ("<PAD>",2), ('column', 3), ('card', 4)])
         for instruction_data in self.train_instructions:
             instruction = instruction_data['instruction']
             for word in instruction.split(" "):

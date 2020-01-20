@@ -1,0 +1,14 @@
+{
+  "name" : "cheated_her_hindsight1_nstep5",
+
+  "algo_params": {
+    "experience_replay_config" : {
+      "use_her" : true,
+      "hindsight_reward" : 1
+    },
+
+    "n_step" : 5
+
+  }
+}
+

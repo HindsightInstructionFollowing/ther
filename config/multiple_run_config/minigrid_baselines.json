@@ -7,83 +7,69 @@
   {
     "model_config": "conv_fetch_minigrid.json",
     "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "n_step3.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "n_step5.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
     "model_ext" : "her.json"
   },
 
+
   {
     "model_config": "conv_fetch_minigrid.json",
     "env_config": "minigrid_fetch_4att_10o.json",
-    "model_ext" : "ther.json"
+    "model_ext" : "her_nstep3.json"
   },
 
   {
     "model_config": "conv_fetch_minigrid.json",
     "env_config": "minigrid_fetch_4att_10o.json",
-    "model_ext" : "ther2.json"
+    "model_ext" : "her_nstep5.json"
   },
 
   {
-    "model_config": "conv_fetch_minigrid.json",
-    "env_config": "minigrid_fetch_4att_10o.json",
-    "model_ext" : "ther3.json"
-  },
-
-  {
-    "model_config": "conv_fetch_recurrent.json",
+    "model_config": "conv_fetch_minigrid_less_up.json",
     "env_config": "minigrid_fetch_4att_10o.json"
   },
 
   {
-    "model_config": "conv_fetch_recurrent.json",
+    "model_config": "conv_fetch_minigrid_less_up.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "n_step3.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid_less_up.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "n_step5.json"
+  },
+
+
+  {
+    "model_config": "conv_fetch_minigrid_less_up.json",
     "env_config": "minigrid_fetch_4att_10o.json",
     "model_ext" : "her.json"
   },
 
+
   {
-    "model_config": "conv_fetch_recurrent_nstep3.json",
-    "env_config": "minigrid_fetch_4att_10o.json"
+    "model_config": "conv_fetch_minigrid_less_up.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "her_nstep3.json"
   },
 
   {
-    "model_config": "conv_fetch_recurrent_nstep3.json",
+    "model_config": "conv_fetch_minigrid_less_up.json",
     "env_config": "minigrid_fetch_4att_10o.json",
-    "model_ext" : "her.json"
-  },
-
-  {
-    "model_config": "conv_fetch_recurrent_nstep3.json",
-    "env_config": "minigrid_fetch_4att_10o.json",
-    "model_ext" : "ther.json"
-  },
-
-  {
-    "model_config": "conv_fetch_recurrent.json",
-    "env_config": "minigrid_fetch_4att_10o.json",
-    "model_ext" : "ther.json"
-  },
-
-  {
-    "model_config": "conv_fetch_recurrent_nstep3.json",
-    "env_config": "minigrid_fetch_4att_10o.json",
-    "model_ext" : "ther2.json"
-  },
-
-  {
-    "model_config": "conv_fetch_recurrent.json",
-    "env_config": "minigrid_fetch_4att_10o.json",
-    "model_ext" : "ther2.json"
-  },
-
-  {
-    "model_config": "conv_fetch_recurrent_nstep3.json",
-    "env_config": "minigrid_fetch_4att_10o.json",
-    "model_ext" : "ther3.json"
-  },
-
-  {
-    "model_config": "conv_fetch_recurrent.json",
-    "env_config": "minigrid_fetch_4att_10o.json",
-    "model_ext" : "ther3.json"
+    "model_ext" : "her_nstep5.json"
   }
 
 ]

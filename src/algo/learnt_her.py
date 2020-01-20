@@ -105,7 +105,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                 last_state = last_state[:, -3:].to(self.device)
                 generated_hindsight_mission = self.instruction_generator.generate(last_state)
 
-                if last_state.size(2) == 7:
+                if last_state.size(2) == 7: # Check only for minigrid (vizdoom instruction are different)
                     n_correct_attrib = self._cheat_check(true_mission=hindsight_mission,
                                                          generated_mission=generated_hindsight_mission)
 
@@ -115,7 +115,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                 # Substitute the old mission with the new one, change the reward at the end of episode
                 hindsight_episode = []
                 len_episode = len(self.current_episode)
-                for step, (st, a, wrong_reward, st_plus1, end_ep, wrong_mission, length, gamma) in self.current_episode:
+                for step, (st, a, wrong_reward, st_plus1, end_ep, wrong_mission, length, gamma) in enumerate(self.current_episode):
                     if step >= len_episode - self.n_step:
                         hindsight_reward = 1 * self.gamma ** (len(self.current_episode) - step - 1)
                     else:

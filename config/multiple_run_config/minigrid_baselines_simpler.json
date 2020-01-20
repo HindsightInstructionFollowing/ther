@@ -23,12 +23,6 @@
   },
 
   {
-    "model_config": "conv_fetch_minigrid.json",
-    "env_config": "minigrid_fetch_4att_6o.json",
-    "model_ext" : "ther3.json"
-  },
-
-  {
     "model_config": "conv_fetch_recurrent.json",
     "env_config": "minigrid_fetch_4att_6o.json"
   },
@@ -72,18 +66,6 @@
     "model_config": "conv_fetch_recurrent.json",
     "env_config": "minigrid_fetch_4att_6o.json",
     "model_ext" : "ther2.json"
-  },
-
-  {
-    "model_config": "conv_fetch_recurrent_nstep3.json",
-    "env_config": "minigrid_fetch_4att_6o.json",
-    "model_ext" : "ther3.json"
-  },
-
-  {
-    "model_config": "conv_fetch_recurrent.json",
-    "env_config": "minigrid_fetch_4att_6o.json",
-    "model_ext" : "ther3.json"
   }
 
 ]

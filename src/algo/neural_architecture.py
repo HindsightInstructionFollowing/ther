@@ -86,6 +86,7 @@ class MinigridRecurrentPolicy(nn.Module):
         kernel_list = config["conv_layers_size"] if "conv_layers_size" in config else [2, 2, 2]
         stride_list = config["conv_layers_stride"] if "conv_layers_stride" in config else [1, 1, 1]
         max_pool_list = config["max_pool_layers"] if "max_pool_layers" in config else [2, 0, 0]
+        self.project_after_conv = config["projection_after_conv"]
 
         self.conv_net, self.size_after_conv = conv_factory(input_shape=obs_space["image"].shape,
                                                            channels=channel_list,
@@ -93,18 +94,27 @@ class MinigridRecurrentPolicy(nn.Module):
                                                            strides=stride_list,
                                                            max_pool=max_pool_list)
 
+        if self.project_after_conv:
+            self.projection_linear = nn.Linear(self.size_after_conv, self.project_after_conv)
+
         # ====================== TEXT ======================
         # ==================================================
         self.fc_text_embedding_size = config["fc_text_embedding_hidden"]
         self.num_token =              int(obs_space["mission"].high.max())
         self.last_hidden_fc_size =    config["last_hidden_fc_size"]
+        self.use_gated_attention =    config["use_gated_attention"]
 
         # Mission : word embedding => gru => linear => concat with vision
         self.ignore_text = config["ignore_text"]
         if not self.ignore_text:
             self.word_embedding_size =       32
             self.rnn_text_hidden_size =      config["rnn_text_hidden_size"]
+
             self.size_after_text_viz_merge = self.fc_text_embedding_size + self.size_after_conv
+            if self.use_gated_attention:
+                num_features_last_cnn = channel_list[-1]
+                self.att_linear = nn.Linear(self.fc_text_embedding_size, num_features_last_cnn)
+                self.size_after_text_viz_merge = self.size_after_conv
 
             self.word_embedding = nn.Embedding(self.num_token, self.word_embedding_size)
             self.text_rnn =       nn.GRU(self.word_embedding_size, self.rnn_text_hidden_size, batch_first=True)
@@ -165,10 +175,27 @@ class MinigridRecurrentPolicy(nn.Module):
 
         flatten_vision_and_text = out_conv.view(-1, self.size_after_conv)
 
+        if self.project_after_conv:
+            flatten_vision_and_text = F.relu(self.projection_linear(flatten_vision_and_text))
+
         if not self.ignore_text:
             out_text = self._text_embedding(mission=state["mission"],
                                             mission_length=state["mission_length"])
-            flatten_vision_and_text = torch.cat((flatten_vision_and_text, out_text), dim=1)
+
+            if self.use_gated_attention:
+                batch_size, last_conv_size, h, w = out_conv.size()
+
+                attention_weights = F.sigmoid(self.att_linear(out_text))
+                attention_weights = attention_weights.unsqueeze(2).unsqueeze(3)
+                attention_weights = attention_weights.expand(batch_size, last_conv_size, h, w)
+                assert attention_weights.size() == out_conv.size()
+                flatten_vision_and_text = attention_weights * out_conv
+                flatten_vision_and_text = flatten_vision_and_text.view(batch_size, -1)
+
+            else:
+                flatten_vision_and_text = torch.cat((flatten_vision_and_text, out_text), dim=1)
+
+
 
         vision_and_text_sequence_format = flatten_vision_and_text.view(n_sequence, max_seq_len, -1)
         vision_and_text_sequence_format = torch.nn.utils.rnn.pack_padded_sequence(input=vision_and_text_sequence_format,

@@ -1,4 +1,5 @@
 # %%
+
 import gym
 import numpy as np
 from algo.basedoubledqn import BaseDoubleDQN
@@ -22,8 +23,9 @@ from config import load_config
 from env_utils import create_doom_env, AttrDict
 
 import ray
+import contextlib
 
-@ray.remote(num_gpus=0.24)
+# @ray.remote(num_gpus=0.24)
 def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_test):
 
     # Setting up context, when using a headless server, xvfbwrapper might be necessary
@@ -31,7 +33,7 @@ def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_t
     #     import xvfbwrapper
     #     display = xvfbwrapper.Xvfb(width=128, height=128, colordepth=16)
     # else:
-    display = open("empty_context.txt", "r")
+    display = contextlib.suppress() # Dummy context manager, not needed
 
     # =================== CONFIGURATION==================
     # ===================================================
@@ -74,6 +76,7 @@ def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_t
     elif full_config["env_type"] == "fetch":
         env_params = full_config["env_params"]
         env_creator = lambda : FetchAttrEnv(size=env_params["size"],
+                                            max_steps=env_params["max_steps"],
                                             numObjs=env_params["numObjs"],
                                             missions_file_str=env_params["missions_file_str"],
                                             single_mission=env_params["single_mission"],
@@ -82,6 +85,7 @@ def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_t
         if "env_test" in full_config:
             test_env_creator = lambda : FetchAttrEnv(size=env_params["size"],
                                                      numObjs=env_params["numObjs"],
+                                                     max_steps=env_params["max_steps"],
                                                      missions_file_str=full_config["env_test"]["missions_file_str"],
                                                      n_step_between_test=full_config["env_test"]["n_step_between_test"],
                                                      n_step_test=full_config["env_test"]["n_step_test"],
@@ -93,9 +97,10 @@ def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_t
         args = AttrDict(full_config["env_params"])
         env_creator = lambda : create_doom_env(args)
         if "env_test" in full_config:
-            test_env_creator = lambda : create_doom_env(args)
-
-
+            print("NO TEST IN DOOM ATM")
+            pass
+            # args["use_train_instructions"] = False
+            # test_env_creator = lambda : create_doom_env(args)
 
     else:
         env_params = full_config["env_params"]
@@ -144,6 +149,7 @@ def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_t
                              test_env=test_env
                              )
     else:
+        raise NotImplementedError("Not available")
         model = PPOAlgo(envs=envs,
                         config=full_config["algo_params"],
                         logger=tf_logger,

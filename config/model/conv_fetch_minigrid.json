@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_fetch_dddqn_frame_stacking_up20000_exp40000_buffer1e5_nstep3",
+  "name" : "minigrid_fetch_dddqn_frame_stacking_up20000",
   "algo" : "dqn",
   "device" : "cuda",
 
@@ -50,7 +50,7 @@
     "batch_size" : 128,
     "lr" : 1e-5,
     "gamma" : 0.99,
-    "n_step" : 3,
+    "n_step" : 1,
     "update_target_every" : 20000,
     "step_exploration" : 40000,
     "weight_decay" : 0

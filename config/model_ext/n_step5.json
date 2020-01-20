@@ -1,0 +1,8 @@
+{
+  "name" : "nstep5",
+
+  "algo_params": {
+    "n_step" : 5
+  }
+}
+

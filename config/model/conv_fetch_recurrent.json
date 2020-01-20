@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_fetch_rdddqn",
+  "name" : "minigrid_fetch_rdddqn_bigger",
   "algo" : "rdqn",
   "device" : "cuda",
 
@@ -8,11 +8,13 @@
   "algo_params": {
     "architecture" : "conv_lstm",
     "architecture_params" : {
+      "use_gated_attention" : false,
+      "projection_after_conv" : 0,
       "ignore_text" : false,
-      "rnn_state_hidden_size" : 300,
+      "rnn_state_hidden_size" : 512,
       "rnn_text_hidden_size" : 128,
       "fc_text_embedding_hidden" : 32,
-      "last_hidden_fc_size" : 64
+      "last_hidden_fc_size" : 128
     },
 
     "experience_replay_config" : {

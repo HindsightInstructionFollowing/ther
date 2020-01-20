@@ -107,8 +107,8 @@ class ReplayMemory(AbstractReplay):
 
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         HER works only if the reward is sparse and provided at the end of the episode
+        because of nstep
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
         """
 
         # ============= Apply n-step and store transitions in temporary episode ====================

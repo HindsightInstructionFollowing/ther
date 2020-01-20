@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('Agg')
+
 from main import start_experiment
 import argparse
 
@@ -47,20 +50,7 @@ if __name__ == "__main__":
             config["exp_dir"] = args.out_dir
 
     done = False
-    while not done:
-        try:
-            list_success = ray.get([start_experiment.remote(**config) for config in configs])
-        except (ray.exceptions.RayWorkerError, ray.exceptions.RayTaskError) as e:
-            print(e)
-            ray.shutdown()
-            ray.init(num_gpus=args.n_gpus)
-            continue
-
-        if len(list_success) < len(configs):
-            continue
-
-        done = all(list_success)
-
+    list_success = ray.get([start_experiment.remote(**config) for config in configs])
 
     print("All expes done, great !")
     #ray.get([train.remote(**config) for config in configs[10:12]])
