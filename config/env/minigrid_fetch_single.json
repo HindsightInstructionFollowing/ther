@@ -1,0 +1,26 @@
+{
+  "name" : "minigrid_fetch_6x6_aw_mw_1obj_1mission",
+  "gym_name" : null,
+
+  "n_episodes" : 10000,
+
+  "dump_log_every" : 5000,
+  "q_visualizer_proba_log" : 0.1,
+  "q_visualizer_ep_num_to_log" : null,
+
+  "env_params" : {
+    "missions_file_str" : "gym-minigrid/gym_minigrid/envs/missions/fetch_train_four_obj_1attr.json",
+    "size" : 6,
+    "numObjs" : 3,
+    "single_mission" : true
+  },
+
+
+  "wrappers_env" : [
+      {
+        "name" : "Word2IndexWrapper",
+        "params" : {"vocab_file_str" : "gym-minigrid/gym_minigrid/envs/missions/vocab_fetch.json"}
+      }
+  ]
+}
+

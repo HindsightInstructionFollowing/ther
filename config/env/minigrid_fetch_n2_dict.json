@@ -1,0 +1,21 @@
+{
+  "name" : "MiniGrid-Fetch-6x6-N2-v0_2e7_dict",
+  "gym_name" : "MiniGrid-Fetch-6x6-N2-v0",
+
+  "n_env_iter" : 2e7,
+
+  "mission_dict_path" : null,
+
+  "q_visualizer_proba_log" : 0.1,
+  "q_visualizer_ep_num_to_log" : null,
+
+  "env_params" : {},
+
+  "wrappers_env" : [
+      {
+        "name" : "Word2IndexWrapper",
+        "params" : {"vocab_file_str" : "gym-minigrid/gym_minigrid/envs/missions/vocab_fetch.json"}
+      }
+  ]
+}
+

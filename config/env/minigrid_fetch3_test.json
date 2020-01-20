@@ -1,0 +1,25 @@
+{
+  "name" : "fetch_3_attr_N3_S7_70_2e7",
+  "gym_name" : null,
+
+  "n_env_iter" : 2e7,
+
+  "q_visualizer_proba_log" : 0.1,
+  "q_visualizer_ep_num_to_log" : null,
+
+  "env_params" : {
+    "missions_file_str" : "gym-minigrid/gym_minigrid/envs/missions/fetch_3_attr_30.json",
+    "size" : 7,
+    "numObjs" : 3,
+    "single_mission" : false
+  }
+},
+
+  "wrappers_env" : [
+      {
+        "name" : "Word2IndexWrapper",
+        "params" : {"vocab_file_str" : "gym-minigrid/gym_minigrid/envs/missions/vocab_fetch.json"}
+      }
+  ]
+}
+

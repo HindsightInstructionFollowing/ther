@@ -1,0 +1,25 @@
+{
+  "name" : "relationnal_fetch_3A_N3_train_2e7",
+  "gym_name" : null,
+
+  "env_type" : "relationnal",
+
+  "n_env_iter" : 2e7,
+
+  "q_visualizer_proba_log" : 0.1,
+  "q_visualizer_ep_num_to_log" : null,
+
+  "env_params" : {
+    "size" : 6,
+    "numObjs" : 3,
+    "mission_dict_path" : "gym-minigrid/gym_minigrid/envs/missions/relationnal_fetch_3A_N3_70.pkl"
+  },
+
+  "wrappers_env" : [
+      {
+        "name" : "Word2IndexWrapper",
+        "params" : {"vocab_file_str" : "gym-minigrid/gym_minigrid/envs/missions/vocab_fetch.json"}
+      }
+  ]
+}
+

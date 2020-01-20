@@ -1,0 +1,31 @@
+{
+  "name" : "fetch_4ttr_N6_S8_80_3e6_and_test_env_more_test",
+  "gym_name" : null,
+  "env_type" : "fetch",
+
+  "n_env_iter" : 3e6,
+
+  "q_visualizer_proba_log" : 0,
+  "q_visualizer_ep_num_to_log" : [1, 2, 100, 1000, 4000],
+
+  "env_params" : {
+    "missions_file_str" : "gym-minigrid/gym_minigrid/envs/missions/fetch_train_missions_80_percent.json",
+    "size" : 8,
+    "numObjs" : 6,
+    "single_mission" : false
+  },
+
+  "env_test" : {
+    "n_step_between_test" : 50000,
+    "n_step_test" : 10000,
+    "missions_file_str" : "gym-minigrid/gym_minigrid/envs/missions/fetch_holdout_20_percent.json"
+  },
+
+  "wrappers_env" : [
+      {
+        "name" : "Word2IndexWrapper",
+        "params" : {"vocab_file_str" : "gym-minigrid/gym_minigrid/envs/missions/vocab_fetch.json"}
+      }
+  ]
+}
+
