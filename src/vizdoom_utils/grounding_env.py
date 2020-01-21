@@ -52,7 +52,8 @@ class GroundingEnv(gym.core.Env):
 
         obs_space = dict()
         obs_space["image"] = gym.spaces.Box(0, 255, (self.params.frame_width, self.params.frame_height, 3))
-        obs_space["mission"] = gym.spaces.Box(0, 255, (7,))
+        obs_space["mission"] = gym.spaces.Box(0, len(self.word_to_idx.keys()), (7,))
+
         obs_space["mission_length"] = gym.spaces.Discrete(7)
         self.observation_space = gym.spaces.Dict(obs_space)
         self.reward_range = (WRONG_OBJECT_REWARD, CORRECT_OBJECT_REWARD)

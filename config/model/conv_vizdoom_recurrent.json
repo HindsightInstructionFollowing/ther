@@ -19,8 +19,10 @@
 
       "ignore_text" : false,
       "rnn_state_hidden_size" : 512,
-      "rnn_text_hidden_size" : 128,
-      "fc_text_embedding_hidden" : 32,
+      "rnn_text_hidden_size" : 256,
+      "word_embedding_size" : 32,
+
+      "fc_text_embedding_hidden" : 0,
       "last_hidden_fc_size" : 256
     },
 

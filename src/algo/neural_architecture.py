@@ -92,7 +92,7 @@ class MinigridRecurrentPolicy(nn.Module):
         kernel_list = config["conv_layers_size"] if "conv_layers_size" in config else [2, 2, 2]
         stride_list = config["conv_layers_stride"] if "conv_layers_stride" in config else [1, 1, 1]
         max_pool_list = config["max_pool_layers"] if "max_pool_layers" in config else [2, 0, 0]
-        self.project_after_conv = config["projection_after_conv"]
+        projection_after_conv = config["projection_after_conv"]
 
         self.conv_net, self.size_after_conv = conv_factory(input_shape=obs_space["image"].shape,
                                                            channels=channel_list,
@@ -100,35 +100,50 @@ class MinigridRecurrentPolicy(nn.Module):
                                                            strides=stride_list,
                                                            max_pool=max_pool_list)
 
-        if self.project_after_conv:
-            self.projection_linear = nn.Linear(self.size_after_conv, self.project_after_conv)
-
         # ====================== TEXT ======================
         # ==================================================
-        self.fc_text_embedding_size = config["fc_text_embedding_hidden"]
-        self.num_token =              int(obs_space["mission"].high.max())
-        self.last_hidden_fc_size =    config["last_hidden_fc_size"]
-        self.use_gated_attention =    config["use_gated_attention"]
-
         # Mission : word embedding => gru => linear => concat with vision
         self.ignore_text = config["ignore_text"]
         if not self.ignore_text:
-            self.word_embedding_size =       32
-            self.rnn_text_hidden_size =      config["rnn_text_hidden_size"]
 
-            self.size_after_text_viz_merge = self.fc_text_embedding_size + self.size_after_conv
+            self.use_gated_attention = config["use_gated_attention"]
+            num_token = int(obs_space["mission"].high.max())
+            word_embedding_size =    config["word_embedding_size"]
+            rnn_text_hidden_size =   config["rnn_text_hidden_size"]
+            fc_text_embedding_size = config["fc_text_embedding_hidden"]
+
+            self.word_embedding = nn.Embedding(num_token, word_embedding_size)
+            self.text_rnn = nn.GRU(word_embedding_size, rnn_text_hidden_size, batch_first=True)
+
+            # Project text using a linear layer or not
+            if fc_text_embedding_size:
+                self.fc_language = nn.Sequential(nn.Linear(in_features=rnn_text_hidden_size,
+                                                            out_features=fc_text_embedding_size),
+                                                  nn.ReLU())
+                self.text_size = fc_text_embedding_size
+            else:
+                self.fc_language = lambda x: x
+                self.text_size = rnn_text_hidden_size
+
             if self.use_gated_attention:
                 num_features_last_cnn = channel_list[-1]
-                self.att_linear = nn.Linear(self.fc_text_embedding_size, num_features_last_cnn)
-                self.size_after_text_viz_merge = self.size_after_conv
+                self.att_linear = nn.Linear(self.text_size, num_features_last_cnn)
+                self.text_size = 0
 
-            self.word_embedding = nn.Embedding(self.num_token, self.word_embedding_size)
-            self.text_rnn =       nn.GRU(self.word_embedding_size, self.rnn_text_hidden_size, batch_first=True)
-            self.fc_language =    nn.Linear(in_features=self.rnn_text_hidden_size,
-                                            out_features=self.fc_text_embedding_size)
+            self.size_after_text_viz_merge = self.size_after_conv + self.text_size
 
         else:
             self.size_after_text_viz_merge = self.size_after_conv
+
+        # ============== PROJECT TEXT AND VISION ? ===============
+        # ========================================================
+        projection_size = config["projection_after_conv"]
+        if projection_size:
+            self.projection_after_merge = nn.Sequential(nn.Linear(self.size_after_text_viz_merge, projection_size),
+                                                         nn.ReLU())
+            self.size_after_text_viz_merge = projection_size
+        else:
+            self.projection_after_merge = lambda x:x
 
 
         # ================ Q-values, V, Advantages =========
@@ -167,7 +182,6 @@ class MinigridRecurrentPolicy(nn.Module):
         # Forward pass through GRU
         outputs, hidden = self.text_rnn(packed)
         out_language = self.fc_language(hidden[0])
-        out_language = F.relu(out_language)
         return out_language
 
     def forward(self, state, ht=None):
@@ -177,13 +191,11 @@ class MinigridRecurrentPolicy(nn.Module):
         padding_mask = state["padding_mask"]
         n_sequence = sequences_length.size(0)
 
+        # ======= VISION ========
         out_conv = self.conv_net(state["image"])
-
         flatten_vision_and_text = out_conv.view(-1, self.size_after_conv)
 
-        if self.project_after_conv:
-            flatten_vision_and_text = F.relu(self.projection_linear(flatten_vision_and_text))
-
+        # ======= TEXT AND MERGE ========
         if not self.ignore_text:
             out_text = self._text_embedding(mission=state["mission"],
                                             mission_length=state["mission_length"])
@@ -202,6 +214,8 @@ class MinigridRecurrentPolicy(nn.Module):
                 flatten_vision_and_text = torch.cat((flatten_vision_and_text, out_text), dim=1)
 
 
+        # ======= PROJECTION ========
+        flatten_vision_and_text = self.projection_after_merge(flatten_vision_and_text)
 
         vision_and_text_sequence_format = flatten_vision_and_text.view(n_sequence, max_seq_len, -1)
         vision_and_text_sequence_format = torch.nn.utils.rnn.pack_padded_sequence(input=vision_and_text_sequence_format,
@@ -209,6 +223,7 @@ class MinigridRecurrentPolicy(nn.Module):
                                                                                   batch_first=True,
                                                                                   enforce_sorted=False)
 
+        # ===== RECURRENT MODULE ======
         if ht is None:
             ht = torch.zeros(1, n_sequence, self.memory_size*2).to(self.device)
 
@@ -224,12 +239,12 @@ class MinigridRecurrentPolicy(nn.Module):
         # Delete all useless padding in state sequences, to avoid computing the q-values for them
         flatten_vision_and_text_without_padding = flatten_vision_and_text[padding_mask == 1]
 
+        # ===== Dueling architecture ======
         q_values = self.actor(flatten_vision_and_text_without_padding)
         next_state_values = self.critic(flatten_vision_and_text_without_padding)
 
         q_values =  next_state_values + q_values - q_values.mean()
         return q_values, memory
-
 
 
 class MinigridConvPolicy(nn.Module, RecurrentACModel):
@@ -264,32 +279,48 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
 
         # ====================== TEXT ======================
         # ==================================================
-        self.fc_text_embedding_size = config["fc_text_embedding_hidden"]
-        self.num_token =              int(obs_space["mission"].high.max())
-        self.last_hidden_fc_size =    config["last_hidden_fc_size"]
-
-        self.use_gated_attention = config["use_gated_attention"]
-
         # Mission : word embedding => gru => linear => concat with vision
         self.ignore_text = config["ignore_text"]
         if not self.ignore_text:
-            self.word_embedding_size =       32
-            self.rnn_text_hidden_size =      config["rnn_text_hidden_size"]
-            
-            self.size_after_text_viz_merge = self.fc_text_embedding_size + self.size_after_conv
+
+            self.use_gated_attention = config["use_gated_attention"]
+            num_token = int(obs_space["mission"].high.max())
+            word_embedding_size =    config["word_embedding_size"]
+            rnn_text_hidden_size =   config["rnn_text_hidden_size"]
+            fc_text_embedding_size = config["fc_text_embedding_hidden"]
+
+            self.word_embedding = nn.Embedding(num_token, word_embedding_size)
+            self.text_rnn = nn.GRU(word_embedding_size, rnn_text_hidden_size, batch_first=True)
+
+            # Project text using a linear layer or not
+            if fc_text_embedding_size:
+                self.fc_language = nn.Sequential(nn.Linear(in_features=rnn_text_hidden_size,
+                                                           out_features=fc_text_embedding_size),
+                                                  nn.ReLU())
+                self.text_size = fc_text_embedding_size
+            else:
+                self.fc_language = lambda x: x
+                self.text_size = rnn_text_hidden_size
 
             if self.use_gated_attention:
                 num_features_last_cnn = channel_list[-1]
-                self.att_linear = nn.Linear(self.fc_text_embedding_size, num_features_last_cnn)
-                self.size_after_text_viz_merge = self.size_after_conv
+                self.att_linear = nn.Linear(self.text_size, num_features_last_cnn)
+                self.text_size = 0
 
-            self.word_embedding = nn.Embedding(self.num_token, self.word_embedding_size)
-            self.text_rnn =       nn.GRU(self.word_embedding_size, self.rnn_text_hidden_size, batch_first=True)
-            self.fc_language =    nn.Linear(in_features=self.rnn_text_hidden_size,
-                                            out_features=self.fc_text_embedding_size)
+            self.size_after_text_viz_merge = self.size_after_conv + self.text_size
 
         else:
             self.size_after_text_viz_merge = self.size_after_conv
+
+        # ============== PROJECT TEXT AND VISION ? ===============
+        # ========================================================
+        projection_size = config["projection_after_conv"]
+        if projection_size:
+            self.projection_after_merge = nn.Sequential(nn.Linear(self.size_after_text_viz_merge, projection_size),
+                                                         nn.ReLU())
+            self.size_after_text_viz_merge = projection_size
+        else:
+            self.projection_after_merge = lambda x: x
 
 
         # ================ Q-values, V, Advantages =========
@@ -330,7 +361,6 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
         # Forward pass through GRU
         outputs, hidden = self.text_rnn(packed)
         out_language = self.fc_language(hidden[0])
-        out_language = F.relu(out_language)
         return out_language
 
     def forward(self, state, memory=None):
@@ -345,15 +375,19 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
             if self.use_gated_attention:
                 batch_size, last_conv_size, h, w = out_conv.size()
 
-                attention_weights = F.sigmoid(self.att_linear(out_text))
+                attention_weights = torch.sigmoid(self.att_linear(out_text))
                 attention_weights = attention_weights.unsqueeze(2).unsqueeze(3)
-                attention_weights.expand(batch_size, last_conv_size, h, w)
+                attention_weights = attention_weights.expand(batch_size, last_conv_size, h, w)
                 assert attention_weights.size() == out_conv.size()
                 flatten_vision_and_text = attention_weights * out_conv
                 flatten_vision_and_text = flatten_vision_and_text.view(batch_size, -1)
 
             else:
                 flatten_vision_and_text = torch.cat((flatten_vision_and_text, out_text), dim=1)
+
+
+        # ===== PROJECTION =======
+        flatten_vision_and_text = self.projection_after_merge(flatten_vision_and_text)
 
         if self.use_memory:
             hidden_memory = (memory[:, :self.semi_memory_size], memory[:, self.semi_memory_size:])
@@ -405,16 +439,16 @@ class InstructionGenerator(nn.Module):
         kernel_list = config["conv_layers_size"]
         stride_list = config["conv_layers_stride"]
         max_pool_list = config["max_pool_layers"]
+        projection_size = config["projection_after_conv"]
 
         # Not being used at the moment
         # self.teacher_forcing_ratio = config["teacher_forcing"]
-
-
         self.conv_net, size_after_conv = conv_factory(input_shape=input_shape,
                                                       channels=channel_list,
                                                       kernels=kernel_list,
                                                       strides=stride_list,
-                                                      max_pool=max_pool_list)
+                                                      max_pool=max_pool_list,
+                                                      projection_size=projection_size)
 
         self.word_embedder = nn.Embedding(num_embeddings=self.vocabulary_size, embedding_dim=config["embedding_dim"])
         self.rnn_decoder = nn.GRU(input_size=config["embedding_dim"], hidden_size=int(size_after_conv), batch_first=True)
