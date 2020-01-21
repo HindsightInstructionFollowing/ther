@@ -230,7 +230,6 @@ class LearntHindsightRecurrentExperienceReplay(LearntHindsightExperienceReplay):
 
     def _store_episode(self, episode_to_store):
         RecurrentReplayBuffer._store_episode(self, episode_to_store)
-
     def sample(self, batch_size):
         return RecurrentReplayBuffer.sample(self, batch_size)
 

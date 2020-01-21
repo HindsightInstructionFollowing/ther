@@ -25,6 +25,8 @@
       "use_her" : false,
       "prioritize" : false,
       "use_ther" : false,
+      "use_compression" : false,
+
       "ther_params" : {
         "accuracy_convergence" : 0.9,
         "lr" : 3e-4,

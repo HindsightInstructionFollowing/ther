@@ -1,0 +1,9 @@
+{
+  "name" : "no_compress",
+  "algo_params": {
+
+    "experience_replay_config" : {
+      "use_compression" : false
+    }
+  }
+}

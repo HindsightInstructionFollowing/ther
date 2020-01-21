@@ -1,4 +1,3 @@
-import collections
 import operator
 import random
 import numpy as np
@@ -7,17 +6,18 @@ import torch
 from abc import ABC
 from abc import abstractmethod
 
+from algo.compression import DummyCompressor, TransitionCompressor
+from algo.neural_architecture import basic_transition
+
 class AbstractReplay(ABC):
     def __init__(self, config):
         """
         All replay buffers are based on the same strategy, making hindsight and Prioritized Replay MUCH EASIER
 
         Sample are added to a temporary episode buffer
-        When DONE is reach, the episode is added to the replay replay alongside a new one if HER is used
+        When DONE is reach, the episode is added to the replay replay alongside a new one if HER is used
         """
-        self.transition = collections.namedtuple("Transition",
-                                                 ["current_state", "action", "reward", "next_state", "terminal",
-                                                  "mission", "mission_length", "gamma"])
+        self.transition = basic_transition
         self.stored_transitions = []
         self.current_episode = []
         self.hindsight_reward = config["hindsight_reward"]
@@ -38,8 +38,16 @@ class AbstractReplay(ABC):
         self.gamma = config["gamma"]
         self.gamma_array = np.array([self.gamma**i for i in range(self.n_step+1)])
 
+        # Storing in replay buffer might be expensive, compressing states (images) can be an option
+        # todo : compress in gpu, would be awesome
+        if config["use_compression"]:
+            self.compressor = TransitionCompressor()
+        else:
+            self.compressor = DummyCompressor()
+
     def sample(self, batch_size):
-        return random.sample(self.memory[:self.n_episodes], batch_size)
+        return [self.compressor.decompress_transition(transition)
+                for transition in random.sample(self.memory[:self.n_episodes], batch_size)]
 
     def _store_episode(self, episode_to_store):
         len_episode = len(episode_to_store)
@@ -70,9 +78,11 @@ class AbstractReplay(ABC):
             assert sum_return == 0
 
         self.current_episode.append(
-            self.transition(current_state=current_state, action=action, reward=sum_return, next_state=n_step_state,
-                            terminal=last_terminal, mission=mission, mission_length=mission_length,
-                            gamma=self.gamma_array[n_step])
+            self.compressor.compress_transition(
+                self.transition(current_state=current_state, action=action, reward=sum_return, next_state=n_step_state,
+                                terminal=last_terminal, mission=mission, mission_length=mission_length,
+                                gamma=self.gamma_array[n_step])
+            )
         )
 
         # Clean
@@ -217,7 +227,7 @@ class RecurrentReplayBuffer(ReplayMemory):
         while size < batch_size:
             id_episode = np.random.choice(range(self.n_episodes), p=self.transition_proba[:self.n_episodes])
             if id_episode in id_taken : continue
-            seq = self.memory[id_episode]
+            seq = [self.compressor.decompress_transition(transition) for transition in self.memory[id_episode]]
             size += len(seq)
             batch_seq.append(seq)
             id_taken.add(id_episode)
@@ -233,7 +243,8 @@ if __name__ == "__main__":
               "size": 11,
               "use_her": True,
               "n_step": 4,
-              "gamma" : 0.99}
+              "gamma" : 0.99,
+              "use_compression" : False}
 
     # %%
 

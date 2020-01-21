@@ -5,8 +5,14 @@ import contextlib
 
 from algo.pg_base import RecurrentACModel, ACModel
 from torch.distributions.categorical import Categorical
+import collections
+
 
 import numpy as np
+
+basic_transition = collections.namedtuple("Transition",
+                                          ["current_state", "action", "reward", "next_state", "terminal",
+                                           "mission", "mission_length", "gamma"])
 
 def init_weights(m):
     if type(m) == nn.Linear:
@@ -185,7 +191,7 @@ class MinigridRecurrentPolicy(nn.Module):
             if self.use_gated_attention:
                 batch_size, last_conv_size, h, w = out_conv.size()
 
-                attention_weights = F.sigmoid(self.att_linear(out_text))
+                attention_weights = torch.sigmoid(self.att_linear(out_text))
                 attention_weights = attention_weights.unsqueeze(2).unsqueeze(3)
                 attention_weights = attention_weights.expand(batch_size, last_conv_size, h, w)
                 assert attention_weights.size() == out_conv.size()
