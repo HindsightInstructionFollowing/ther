@@ -43,9 +43,6 @@ class RecurrentDQN(BaseDoubleDQN):
         """
         Subsample, pad and batch states
         """
-
-        transitions = copy.deepcopy(transitions)
-
         max_length = len(max(transitions, key=lambda x:len(x)))
         batch_dict = {
             "state" :                  [],
@@ -65,6 +62,7 @@ class RecurrentDQN(BaseDoubleDQN):
             seq_length = len(state_sequences)
             padding_length = max_length - seq_length
             mask = [1 for i in range(max_length)]
+            transition_padding = []
 
             if padding_length > 0:
                 dummy_transition = self.replay_buffer.transition(current_state=self.state_padding,
@@ -77,14 +75,13 @@ class RecurrentDQN(BaseDoubleDQN):
                                                                  gamma=0
                                                                  )
 
-                for new_t in range(padding_length):
-                    state_sequences.append(copy.deepcopy(dummy_transition))
-
+                transition_padding = [dummy_transition] * padding_length
                 mask[seq_length:] = [0 for _ in range(padding_length)]
 
+            padded_sequences = state_sequences + transition_padding
 
             batch_dict["state_sequence_lengths"].append(seq_length)
-            state_sequences_transitions = self.replay_buffer.transition(*zip(*state_sequences))
+            state_sequences_transitions = self.replay_buffer.transition(*zip(*padded_sequences))
 
             batch_dict["state"].extend(         state_sequences_transitions.current_state)
             batch_dict["next_state"].extend(    state_sequences_transitions.next_state)
@@ -142,7 +139,6 @@ class RecurrentDQN(BaseDoubleDQN):
 
         #============= Computing targets ===========
         #===========================================
-
         targets = torch.FloatTensor(batch_dict["reward"])[batch_mask == 1].to(self.device).reshape(-1, 1)
 
         batch_next_state_non_terminal_dict = {

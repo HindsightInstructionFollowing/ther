@@ -3,7 +3,7 @@
   "algo" : "rdqn",
   "device" : "cuda",
 
-  "dump_log_every" : 30000,
+  "dump_log_every" : 10000,
 
   "algo_params": {
     "architecture" : "conv_lstm",
