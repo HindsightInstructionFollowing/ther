@@ -6,6 +6,8 @@ from algo.neural_architecture import basic_transition
 import numpy as np
 import torch
 
+import cv2
+
 class DummyCompressor(object):
     def compress_transition(self, transition):
         return transition
@@ -47,6 +49,16 @@ class TransitionCompressor(object):
 
         return compressed_transitions
 
+class TransitionCompressorPNG(TransitionCompressor):
+    def compress_elem(self, elem):
+        elem = elem.squeeze(0).swapaxes(0,2).swapaxes(0,1)
+        _, im = cv2.imencode('.png', elem)
+        return im
+    def decompress_elem(self, elem):
+        im = cv2.imdecode(elem, cv2.IMREAD_COLOR)
+        elem = np.expand_dims(im.swapaxes(1,0).swapaxes(2,0), 0)
+        return elem
+
 
 class TransitionCompressorTest(TransitionCompressor):
     def __init__(self, config, array_size):
@@ -73,9 +85,14 @@ class TransitionCompressorTest(TransitionCompressor):
 if __name__ == "__main__":
 
     import sys
+    import torch
 
     def get_size(obj, seen=None):
         """Recursively finds size of objects"""
+
+        if isinstance(obj, torch.Tensor):
+            return obj.nelement() * obj.element_size()
+
         size = sys.getsizeof(obj)
         if seen is None:
             seen = set()
@@ -97,6 +114,7 @@ if __name__ == "__main__":
 
     array_size = (128,128,3)
     number = 1000
+    image = torch.Tensor(np.load("test_image.npy"))
 
     compress1 = TransitionCompressorTest(config=dict([('typesize', 1), ("cname", 'lz4')]), array_size=array_size)
     compress2 = TransitionCompressorTest(config=dict([('typesize', 8), ("cname", 'lz4')]), array_size=array_size)
@@ -109,8 +127,11 @@ if __name__ == "__main__":
     compress6 = TransitionCompressorTest(config=dict([('typesize', 4), ("cname", 'zlib')]), array_size=array_size) # Compression time is loooong
     compress7 = TransitionCompressorTest(config=dict([('typesize', 1), ("cname", 'zlib')]), array_size=array_size) # Compression time is loooong
 
-    t = basic_transition(current_state=np.random.randint(0, 255, size=array_size),
-                         next_state=np.random.randint(0, 255, size=array_size),
+    compress8 = TransitionCompressorPNG()
+
+
+    t = basic_transition(current_state=image,
+                         next_state=image,
                          action=0,
                          reward=1,
                          terminal=2,
@@ -126,6 +147,7 @@ if __name__ == "__main__":
     print(get_size(compress3.compress_transition(t).current_state) / original_size)
     print(get_size(compress5.compress_transition(t).current_state) / original_size)
     print(get_size(compress6.compress_transition(t).current_state) / original_size)
+    print(get_size(compress8.compress_transition(t).current_state) / original_size)
 
 
 
@@ -135,16 +157,19 @@ if __name__ == "__main__":
     print(timeit.timeit(lambda: compress3.compress_transition(t), number=number))
     print(timeit.timeit(lambda: compress4.compress_transition(t), number=number))
     print(timeit.timeit(lambda: compress5.compress_transition(t), number=number))
+    print(timeit.timeit(lambda: compress8.compress_transition(t), number=number))
 
     t_compress = compress1.compress_transition(t)
     t_compress_array = compress5.compress_transition(t)
+    t_png = compress8.compress_transition(t)
 
     print("Decompression time :")
-    print(timeit.timeit(lambda : compress1.decompress_transition(t_compress), number=number*3))
-    print(timeit.timeit(lambda : compress2.decompress_transition(t_compress), number=number*3))
-    print(timeit.timeit(lambda : compress3.decompress_transition(t_compress), number=number*3))
-    print(timeit.timeit(lambda : compress4.decompress_transition(t_compress), number=number*3))
-    print(timeit.timeit(lambda : compress5.decompress_transition(t_compress_array), number=number*3))
+    print(timeit.timeit(lambda : compress1.decompress_transition(t_compress), number=number))
+    print(timeit.timeit(lambda : compress2.decompress_transition(t_compress), number=number))
+    print(timeit.timeit(lambda : compress3.decompress_transition(t_compress), number=number))
+    print(timeit.timeit(lambda : compress4.decompress_transition(t_compress), number=number))
+    print(timeit.timeit(lambda : compress5.decompress_transition(t_compress_array), number=number))
+    print(timeit.timeit(lambda : compress8.decompress_transition(t_png), number=number))
 
     a = compress5.decompress_transition(t_compress_array)
-    print(a.shape)
+    #print(a.current_state.shape)

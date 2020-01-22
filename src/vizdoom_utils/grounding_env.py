@@ -126,6 +126,8 @@ class GroundingEnv(gym.core.Env):
             object_id, pos_x, pos_y in
             zip(object_ids, object_x_coordinates, object_y_coordinates)]
 
+        pause_game(self.game, 1)
+
         screen = self.game.get_state().screen_buffer
         screen_buf = process_screen(screen, self.params.frame_height,
                                     self.params.frame_width)

@@ -25,7 +25,7 @@ from env_utils import create_doom_env, AttrDict
 import ray
 import contextlib
 
-# @ray.remote(num_gpus=0.24)
+#@ray.remote(num_gpus=0.24)
 def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_test):
 
     # Setting up context, when using a headless server, xvfbwrapper might be necessary

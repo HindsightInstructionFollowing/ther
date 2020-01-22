@@ -1,5 +1,5 @@
 {
-  "name" : "vizdoom_explo1e5_target1e4_nstep1_test1",
+  "name" : "vizdoom_explo1e5_target1e4_nstep1_proj_stacking",
   "algo" : "dqn",
   "device" : "cuda",
 
@@ -12,7 +12,7 @@
       "conv_layers_size" : [8,4,4],
       "conv_layers_stride" : [4,2,2],
       "max_pool_layers" : [0,0,0],
-      "projection_after_conv" : 0,
+      "projection_after_conv" : 1024,
 
       "use_gated_attention" : true,
 
@@ -65,7 +65,7 @@
     "lr" : 1e-5,
     "gamma" : 0.99,
     "n_step" : 1,
-    "update_target_every" : 10000,
+    "update_target_every" : 20000,
     "step_exploration" : 100000,
     "weight_decay" : 0
   },

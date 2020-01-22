@@ -7,12 +7,6 @@
   {
     "model_config": "conv_vizdoom.json",
     "env_config": "vizdoom_easy.json",
-    "model_ext" : "n_step3.json"
-  },
-
-  {
-    "model_config": "conv_vizdoom.json",
-    "env_config": "vizdoom_easy.json",
     "model_ext" : "n_step5.json"
   },
 
@@ -25,13 +19,18 @@
   {
     "model_config": "conv_vizdoom.json",
     "env_config": "vizdoom_easy.json",
-    "model_ext" : "her_nstep3.json"
+    "model_ext" : "her_nstep5.json"
   },
 
   {
-    "model_config": "conv_vizdoom.json",
+    "model_config": "conv_vizdoom_recurrent.json",
+    "env_config": "vizdoom_easy.json",
+    "model_ext" : "her.json"
+  },
+
+  {
+    "model_config": "conv_vizdoom_recurrent.json",
     "env_config": "vizdoom_easy.json",
     "model_ext" : "her_nstep5.json"
   }
-
 ]

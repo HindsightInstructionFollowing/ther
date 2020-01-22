@@ -80,19 +80,12 @@ class MinigridRecurrentPolicy(nn.Module):
 
         # ================= VISION ====================
         # =============================================
-        # If frame stacker
-        c, h, w = obs_space["image"].shape
-
-        self.channel = c
-        self.height = h
-        self.width = w
 
         # xxxxx_list[0] correspond to the first conv layer, xxxxx_list[1] to the second etc ...
         channel_list = config["conv_layers_channel"] if "conv_layers_channel" in config else [16, 32, 64]
         kernel_list = config["conv_layers_size"] if "conv_layers_size" in config else [2, 2, 2]
         stride_list = config["conv_layers_stride"] if "conv_layers_stride" in config else [1, 1, 1]
         max_pool_list = config["max_pool_layers"] if "max_pool_layers" in config else [2, 0, 0]
-        projection_after_conv = config["projection_after_conv"]
 
         self.conv_net, self.size_after_conv = conv_factory(input_shape=obs_space["image"].shape,
                                                            channels=channel_list,

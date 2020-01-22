@@ -3,6 +3,7 @@ __author__ = "Devendra Chaplot"
 
 import re
 import cv2
+import time
 
 def set_doom_configuration(game, params):
     game.set_doom_scenario_path(params.scenario_path)
@@ -68,10 +69,14 @@ def spawn_object(game, object_id, x, y):
     x_pos, y_pos = get_doom_coordinates(x, y)
     # call spawn function twice because utils objects are not spawned
     # sometimes if spawned only once for some unknown reason
-    for _ in range(2):
+
+    # DIDN'T NOTICE ANY PROBLEM, spawning once is enough
+    for _ in range(1):
         game.send_game_command("pukename spawn_object_by_id_and_location \
                                 %i %i %i" % (object_id, x_pos, y_pos))
-        pause_game(game, 1)
+
+        pause_game(game, 1) # This is SUPER necessary
+
 
 
 def spawn_agent(game, x, y, orientation):
@@ -81,8 +86,8 @@ def spawn_agent(game, x, y, orientation):
 
 
 def pause_game(game, steps):
-    for i in range(1):
-        r = game.make_action([False, False, False])
+    for i in range(steps):
+        game.make_action([False, False, False])
 
 
 def split_object(object_string):

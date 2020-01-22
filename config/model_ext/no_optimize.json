@@ -1,0 +1,11 @@
+{
+  "name" : "no_optimize",
+
+  "algo_params": {
+    "batch_size" : 1e10
+  }
+
+}
+
+
+
