@@ -23,15 +23,16 @@ actions = [[True, False, False], [False, True, False], [False, False, True]]
 ObjectLocation = collections.namedtuple("ObjectLocation", ["x", "y"])
 AgentLocation = collections.namedtuple("AgentLocation", ["x", "y", "theta"])
 
-
 class GroundingEnv(gym.core.Env):
-    def __init__(self, args):
+    def __init__(self, args, logger=None):
         """Initializes the environment.
         Args:
           args: dictionary of parameters.
         """
         super().__init__()
         self.params = args
+
+        self.logger = logger
 
         # Reading train and test instructions.
         self.train_instructions = self.get_instr(self.params.train_instr_file)
@@ -140,7 +141,7 @@ class GroundingEnv(gym.core.Env):
         return state, reward, is_final, extra_args
 
     def render(self, mode='human'):
-        return self.game.get_state().screen_buffer
+        return process_screen(self.game.get_state().screen_buffer, self.params.frame_height, self.params.frame_width)
 
     def step(self, action_id):
         """Executes an action in the environment to reach a new state.
@@ -191,6 +192,9 @@ class GroundingEnv(gym.core.Env):
             screen, self.params.frame_height, self.params.frame_width)
 
         state = (screen_buf, self.mission, hindsight_mission)
+
+        if self.logger and is_final:
+            self.logger.store_sentences(self.mission, reward)
 
         return state, reward, is_final, None
 

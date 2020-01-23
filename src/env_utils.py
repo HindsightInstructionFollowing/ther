@@ -10,8 +10,8 @@ class AttrDict(dict):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
 
-def create_doom_env(args):
-    env = grounding_env.GroundingEnv(args)
+def create_doom_env(args, logger):
+    env = grounding_env.GroundingEnv(args, logger)
     env.game_init()
     return env
 

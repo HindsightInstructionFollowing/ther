@@ -25,7 +25,7 @@ from env_utils import create_doom_env, AttrDict
 import ray
 import contextlib
 
-#@ray.remote(num_gpus=0.24)
+#@ray.remote(num_gpus=0.33)
 def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_test):
 
     # Setting up context, when using a headless server, xvfbwrapper might be necessary
@@ -95,12 +95,10 @@ def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_t
 
     elif full_config["env_type"] == "vizdoom":
         args = AttrDict(full_config["env_params"])
-        env_creator = lambda : create_doom_env(args)
+        env_creator = lambda : create_doom_env(args, tf_logger)
         if "env_test" in full_config:
-            print("NO TEST IN DOOM ATM")
-            pass
-            # args["use_train_instructions"] = False
-            # test_env_creator = lambda : create_doom_env(args)
+            args["use_train_instructions"] = False
+            test_env_creator = lambda : create_doom_env(args, tf_logger)
 
     else:
         env_params = full_config["env_params"]

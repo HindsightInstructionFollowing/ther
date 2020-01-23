@@ -7,7 +7,7 @@
   "n_env_iter" : 10e6,
 
   "q_visualizer_proba_log" : 0,
-  "q_visualizer_ep_num_to_log" : [100,2000,10000],
+  "q_visualizer_ep_num_to_log" : [1, 10, 100, 1000, 5000, 10000, 15000, 20000, 25000, 30000, 60000],
 
   "env_params" : {
     "max_episode_length" : 30,
