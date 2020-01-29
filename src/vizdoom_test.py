@@ -1,7 +1,5 @@
 #%%
 
-import vizdoom
-import argparse
 from vizdoom_utils import grounding_env
 import numpy as np
 import json

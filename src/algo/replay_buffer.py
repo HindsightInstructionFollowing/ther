@@ -161,8 +161,11 @@ class ReplayMemory(AbstractReplay):
             for step, (st, a, wrong_reward, st_plus1, end_ep, wrong_mission, length, gamma) in enumerate(self.current_episode):
                 if step >= len_episode - self.n_step:
                     hindsight_reward = 1 * self.gamma**(len(self.current_episode) - step - 1)
+                    assert end_ep
                 else:
                     hindsight_reward = 0
+
+
                 hindsight_episode.append(self.transition(current_state=st,
                                                          action=a,
                                                          reward=hindsight_reward,

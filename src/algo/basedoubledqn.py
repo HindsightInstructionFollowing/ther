@@ -220,7 +220,7 @@ class BaseDoubleDQN(nn.Module):
                 "param {} changed".format(param_name)
 
 
-    def test(self, display):
+    def test(self):
 
         print("==============================")
         print("Break, using model in test env")
@@ -228,124 +228,124 @@ class BaseDoubleDQN(nn.Module):
 
         test_step = 0
         episode_num = 0
-        with display:
-            while test_step < self.test_env.n_step_test:
 
-                done = False
-                obs = self.test_env.reset()
-                iter_this_ep = 0
-                reward_this_ep = 0
-                begin_ep_time = time.time()
-                ht = None
+        while test_step < self.test_env.n_step_test:
 
-                while not done:
-                    act, q_values, ht = self.select_action(obs, ht)
-                    new_obs, reward, done, info = self.test_env.step(act)
+            done = False
+            obs = self.test_env.reset()
+            iter_this_ep = 0
+            reward_this_ep = 0
+            begin_ep_time = time.time()
+            ht = None
 
-                    iter_this_ep += 1
-                    test_step += 1
-                    reward_this_ep += reward
+            while not done:
+                act, q_values, ht = self.select_action(obs, ht)
+                new_obs, reward, done, info = self.test_env.step(act)
 
-                    obs = new_obs
+                iter_this_ep += 1
+                test_step += 1
+                reward_this_ep += reward
 
-                    self.tf_logger.log("test/max_q_val", max(q_values), operation='max')
-                    self.tf_logger.log("test/min_q_val", min(q_values), operation='min')
+                obs = new_obs
 
-                    # Dump tensorboard stats
-                    self.tf_logger.dump(total_step=test_step)
+                self.tf_logger.log("test/max_q_val", max(q_values), operation='max')
+                self.tf_logger.log("test/min_q_val", min(q_values), operation='min')
 
-                # ============ END OF EP ==============
-                # =====================================
-                episode_num += 1
-                time_since_ep_start = time.time() - begin_ep_time
+                # Dump tensorboard stats
+                self.tf_logger.dump(total_step=test_step)
 
-                print(
-                    "TEST : End of ep #{} Time since begin ep : {:.2f}, Time per step : {:.2f} Total iter : {}  iter this ep : {} rewrd : {:.3f}".format(
-                        episode_num, time_since_ep_start, time_since_ep_start / iter_this_ep, test_step,
-                        iter_this_ep,
-                        reward_this_ep))
+            # ============ END OF EP ==============
+            # =====================================
+            episode_num += 1
+            time_since_ep_start = time.time() - begin_ep_time
 
-                self.tf_logger.log("test/n_iter_per_ep", iter_this_ep)
-                self.tf_logger.log("test/wrong_pick", int(iter_this_ep < self.env.unwrapped.max_steps and reward_this_ep <= 0))
-                self.tf_logger.log("test/time_out", int(iter_this_ep >= self.env.unwrapped.max_steps))
-                self.tf_logger.log("test/reward", reward_this_ep)
-                self.tf_logger.log("test/accuracy", reward_this_ep > 0)
+            print(
+                "TEST : End of ep #{} Time since begin ep : {:.2f}, Time per step : {:.2f} Total iter : {}  iter this ep : {} rewrd : {:.3f}".format(
+                    episode_num, time_since_ep_start, time_since_ep_start / iter_this_ep, test_step,
+                    iter_this_ep,
+                    reward_this_ep))
+
+            self.tf_logger.log("test/n_iter_per_ep", iter_this_ep)
+            self.tf_logger.log("test/wrong_pick", int(iter_this_ep < self.env.unwrapped.max_steps and reward_this_ep <= 0))
+            self.tf_logger.log("test/time_out", int(iter_this_ep >= self.env.unwrapped.max_steps))
+            self.tf_logger.log("test/reward", reward_this_ep)
+            self.tf_logger.log("test/accuracy", reward_this_ep > 0)
 
         print("Back to training")
         print("================")
 
-    def train(self, n_env_iter, visualizer=None, display=None):
+    def train(self, n_env_iter, visualizer=None):
 
         self.environment_step = 1
         episode_num = 1
 
         next_test = self.test_env.n_step_between_test if self.test_env is not None else 0
 
-        with display:
-            while self.environment_step < n_env_iter:
 
-                done = False
-                obs = self.env.reset()
-                iter_this_ep = 0
-                reward_this_ep = 0
-                begin_ep_time = time.time()
-                ht = None
+        while self.environment_step < n_env_iter:
 
-                while not done:
-                    act, q_values, ht = self.select_action(obs, ht)
-                    new_obs, reward, done, info = self.env.step(act)
+            done = False
+            obs = self.env.reset()
+            iter_this_ep = 0
+            reward_this_ep = 0
+            begin_ep_time = time.time()
+            ht = None
 
-                    iter_this_ep += 1
-                    self.environment_step += 1
-                    reward_this_ep += reward
+            while not done:
+                act, q_values, ht = self.select_action(obs, ht)
+                new_obs, reward, done, info = self.env.step(act)
 
-                    loss = self.optimize_model(state=obs,
-                                               action=act,
-                                               next_state=new_obs,
-                                               reward=reward,
-                                               done=done
-                                               )
+                iter_this_ep += 1
+                self.environment_step += 1
+                reward_this_ep += reward
 
-                    obs = new_obs
+                loss = self.optimize_model(state=obs,
+                                           action=act,
+                                           next_state=new_obs,
+                                           reward=reward,
+                                           done=done
+                                           )
 
-                    self.tf_logger.log("train/loss", loss)
-                    self.tf_logger.log("train/max_q_val", max(q_values), operation='max')
-                    self.tf_logger.log("train/min_q_val", min(q_values), operation='min')
+                obs = new_obs
 
-                    # Dump tensorboard stats
-                    self.tf_logger.dump(total_step=self.environment_step)
+                self.tf_logger.log("train/loss", loss)
+                self.tf_logger.log("train/max_q_val", max(q_values), operation='max')
+                self.tf_logger.log("train/min_q_val", min(q_values), operation='min')
 
-                    # Dump image
-                    image = self.q_values_visualizer.render_state_and_q_values(game=self.env, q_values=q_values,
-                                                                               ep_num=episode_num)
-                    if image is not None:
-                        self.tf_logger.add_image(tag="data/q_value_ep{}".format(episode_num),
-                                                 img_tensor=image,
-                                                 global_step=iter_this_ep,
-                                                 dataformats="HWC")
+                # Dump tensorboard stats
+                self.tf_logger.dump(total_step=self.environment_step)
 
-                # ============ END OF EP ==============
-                # =====================================
-                episode_num += 1
-                time_since_ep_start = time.time() - begin_ep_time
+                # Dump image
+                image = self.q_values_visualizer.render_state_and_q_values(game=self.env, q_values=q_values,
+                                                                           ep_num=episode_num)
+                if image is not None:
+                    self.tf_logger.add_image(tag="data/q_value_ep{}".format(episode_num),
+                                             img_tensor=image,
+                                             global_step=iter_this_ep,
+                                             dataformats="HWC")
 
-                loss_mean = np.mean(self.tf_logger.variable_to_log['train/loss']['values'])
-                print("loss_mean {}".format(loss_mean))
-                print(
-                "End of ep #{} Time since begin ep : {:.2f}, Time per step : {:.2f} Total iter : {}  iter this ep : {} rewrd : {:.3f}".format(
-                    episode_num, time_since_ep_start, time_since_ep_start / iter_this_ep, self.environment_step, iter_this_ep,
-                    reward_this_ep))
+            # ============ END OF EP ==============
+            # =====================================
+            episode_num += 1
+            time_since_ep_start = time.time() - begin_ep_time
 
-                self.tf_logger.log("train/n_iter_per_ep", iter_this_ep)
-                self.tf_logger.log("train/wrong_pick", int(iter_this_ep < self.env.unwrapped.max_steps and reward_this_ep <= 0))
-                self.tf_logger.log("train/time_out", int(iter_this_ep >= self.env.unwrapped.max_steps))
-                self.tf_logger.log("train/reward", reward_this_ep)
-                self.tf_logger.log("train/accuracy", reward_this_ep > 0)
-                self.tf_logger.log("train/epsilon", self.current_epsilon)
+            loss_mean = np.mean(self.tf_logger.variable_to_log['train/loss']['values'])
+            print("loss_mean {}".format(loss_mean))
+            print(
+            "End of ep #{} Time since begin ep : {:.2f}, Time per step : {:.2f} Total iter : {}  iter this ep : {} rewrd : {:.3f}".format(
+                episode_num, time_since_ep_start, time_since_ep_start / iter_this_ep, self.environment_step, iter_this_ep,
+                reward_this_ep))
 
-                if self.test_env and self.environment_step > next_test:
-                    self.test(display=display)
-                    next_test = self.environment_step + self.test_env.n_step_between_test
+            self.tf_logger.log("train/n_iter_per_ep", iter_this_ep)
+            self.tf_logger.log("train/wrong_pick", int(iter_this_ep < self.env.unwrapped.max_steps and reward_this_ep <= 0))
+            self.tf_logger.log("train/time_out", int(iter_this_ep >= self.env.unwrapped.max_steps))
+            self.tf_logger.log("train/reward", reward_this_ep)
+            self.tf_logger.log("train/accuracy", reward_this_ep > 0)
+            self.tf_logger.log("train/epsilon", self.current_epsilon)
+
+            if self.test_env and self.environment_step > next_test:
+                self.test()
+                next_test = self.environment_step + self.test_env.n_step_between_test
 
 
 

@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import itertools as it
 
 from copy import deepcopy
@@ -194,6 +195,23 @@ def extend_multiple_seed(all_expe_to_run, number_of_seed=2):
             extended_expe_list.append(new_expe)
 
     return extended_expe_list
+
+
+class PrintLogger(object):
+    def __init__(self, expe_path):
+        self.terminal = sys.stdout
+        log_file_path = os.path.join(expe_path, "logfile.log")
+        self.log = open(log_file_path, "a")
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+
+    def flush(self):
+        #this flush method is needed for python 3 compatibility.
+        #this handles the flush command by doing nothing.
+        #you might want to specify some extra behavior here.
+        pass
 
 
 # =====================

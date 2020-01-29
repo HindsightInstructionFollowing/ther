@@ -1,0 +1,17 @@
+{
+  "name" : "no_optimize_her",
+
+  "algo_params": {
+
+    "experience_replay_config" : {
+      "hindsight_reward": 1,
+      "use_her": true
+    },
+
+    "batch_size" : 1e10
+  }
+
+}
+
+
+
