@@ -1,5 +1,3 @@
-# %%
-
 import gym
 import numpy as np
 from algo.basedoubledqn import BaseDoubleDQN
@@ -10,30 +8,17 @@ from gym_minigrid.wrappers import wrap_env_from_list
 
 from gym_minigrid.envs.relationnal import RelationnalFetch
 
-from env_utils import AttrDict
-
 from image_helper import QValueVisualizer
 
 from logging_helper import SweetLogger
-import time
-import os
-import shutil
 
-from config import load_config
+from config import load_config, LoggingPrinter
 from env_utils import create_doom_env, AttrDict
 
 import ray
-import contextlib
 
-#@ray.remote(num_gpus=0.33)
+@ray.remote(num_gpus=0.33)
 def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_test):
-
-    # Setting up context, when using a headless server, xvfbwrapper might be necessary
-    # if not local_test:
-    #     import xvfbwrapper
-    #     display = xvfbwrapper.Xvfb(width=128, height=128, colordepth=16)
-    # else:
-    display = contextlib.suppress() # Dummy context manager, not needed
 
     # =================== CONFIGURATION==================
     # ===================================================
@@ -158,7 +143,8 @@ def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_t
     print(envs[0].observation_space)
 
     # ================ TRAINING HERE ===============
-    model.train(n_env_iter=n_env_iter, visualizer=q_values_visualizer, display=display)
+    with LoggingPrinter(expe_path):
+        model.train(n_env_iter=n_env_iter, visualizer=q_values_visualizer)
 
 if __name__ == "__main__":
 

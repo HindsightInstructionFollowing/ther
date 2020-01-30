@@ -197,21 +197,31 @@ def extend_multiple_seed(all_expe_to_run, number_of_seed=2):
     return extended_expe_list
 
 
-class PrintLogger(object):
+class LoggingPrinter:
     def __init__(self, expe_path):
-        self.terminal = sys.stdout
         log_file_path = os.path.join(expe_path, "logfile.log")
-        self.log = open(log_file_path, "a")
-
-    def write(self, message):
-        self.terminal.write(message)
-        self.log.write(message)
-
+        self.out_file = open(log_file_path, "w")
+        self.old_stdout = sys.stdout
+        self.old_stderr = sys.stderr
+        #this object will take over `stdout`'s job
+        sys.stdout = self
+        sys.stderr = self
+    #executed when the user does a `print`
+    def write(self, text):
+        self.old_stdout.write(text)
+        self.out_file.write(text)
     def flush(self):
-        #this flush method is needed for python 3 compatibility.
-        #this handles the flush command by doing nothing.
-        #you might want to specify some extra behavior here.
         pass
+    #executed when `with` block begins
+    def __enter__(self):
+        return self
+    #executed when `with` block ends
+    def __exit__(self, error_type, value, traceback):
+        #we don't want to log anymore. Restore the original stdout object.
+        sys.stdout = self.old_stdout
+        if traceback is None:
+            sys.stderr = self.old_stderr
+
 
 
 # =====================
@@ -232,4 +242,9 @@ def set_seed(seed):
 
 
 if __name__ == "__main__":
-    pass
+
+    with LoggingPrinter(''):
+        for i in range(10):
+            print("Test")
+
+    print("C'est FINI, autre chose")

@@ -326,6 +326,9 @@ class BaseDoubleDQN(nn.Module):
 
             # ============ END OF EP ==============
             # =====================================
+            if episode_num == 10 :
+                assert False
+
             episode_num += 1
             time_since_ep_start = time.time() - begin_ep_time
 
