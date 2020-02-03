@@ -206,7 +206,6 @@ class MinigridRecurrentPolicy(nn.Module):
             else:
                 flatten_vision_and_text = torch.cat((flatten_vision_and_text, out_text), dim=1)
 
-
         # ======= PROJECTION ========
         flatten_vision_and_text = self.projection_after_merge(flatten_vision_and_text)
 
@@ -428,11 +427,12 @@ class InstructionGenerator(nn.Module):
         self.vocabulary_size = n_output
         self.generator_max_len = config["generator_max_len"]
 
-        channel_list = config["conv_layers_channel"]
-        kernel_list = config["conv_layers_size"]
-        stride_list = config["conv_layers_stride"]
+        channel_list =  config["conv_layers_channel"]
+        kernel_list =   config["conv_layers_size"]
+        stride_list =   config["conv_layers_stride"]
         max_pool_list = config["max_pool_layers"]
-        projection_size = config["projection_after_conv"]
+        dropout =       config["dropout"]
+        hidden_size =   config["decoder_hidden"]
 
         # Not being used at the moment
         # self.teacher_forcing_ratio = config["teacher_forcing"]
@@ -440,12 +440,21 @@ class InstructionGenerator(nn.Module):
                                                       channels=channel_list,
                                                       kernels=kernel_list,
                                                       strides=stride_list,
-                                                      max_pool=max_pool_list,
-                                                      projection_size=projection_size)
+                                                      max_pool=max_pool_list)
 
-        self.word_embedder = nn.Embedding(num_embeddings=self.vocabulary_size, embedding_dim=config["embedding_dim"])
-        self.rnn_decoder = nn.GRU(input_size=config["embedding_dim"], hidden_size=int(size_after_conv), batch_first=True)
-        self.mlp_decoder = nn.Linear(in_features=int(size_after_conv), out_features=n_output)
+        self.word_embedder = nn.Embedding(num_embeddings=self.vocabulary_size,
+                                          embedding_dim=config["embedding_dim"],
+                                          padding_idx=2)
+
+        self.rnn_decoder = nn.GRU(input_size=config["embedding_dim"],
+                                  hidden_size=int(size_after_conv),
+                                  num_layers=1,
+                                  batch_first=True,
+                                  dropout=0)
+
+        self.mlp_decoder_hidden = nn.Linear(in_features=int(size_after_conv), out_features=hidden_size)
+        self.mlp_decoder = nn.Linear(in_features=hidden_size, out_features=n_output)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, states, teacher_sentence, lengths):
         """
@@ -460,17 +469,18 @@ class InstructionGenerator(nn.Module):
         conv_ht = self.conv_net(states)
         conv_ht = conv_ht.view(batch_size, -1)
 
+        # hx size is (num_layers*num_directions, batch_size, hidden_size), 1 layer and 1 direction in this architecture
+        conv_ht = conv_ht.unsqueeze(0) # Adding num_layer*directions dimension
+
         # Remove the last <pad> token as it's not useful to predict
         # teacher_sentence_cut = teacher_sentence[:, :-1]
         # lengths_reduced = lengths - 1
 
-        embedded_sentences = self.word_embedder(teacher_sentence)
+        embedded_sentences = F.relu(self.word_embedder(teacher_sentence))
         packed_embedded = torch.nn.utils.rnn.pack_padded_sequence(input=embedded_sentences,
                                                                   lengths=lengths,
                                                                   batch_first=True, enforce_sorted=False)
 
-        # hx size is (num_layers*num_directions, batch_size, hidden_size), 1 layer and 1 direction in this architecture
-        conv_ht = conv_ht.unsqueeze(0) # Adding num_layer*directions dimension
 
         # Compute all ht in a forward pass, teacher_forcing 100% of the time
         ht, _ = self.rnn_decoder(input=packed_embedded, hx=conv_ht)
@@ -478,36 +488,42 @@ class InstructionGenerator(nn.Module):
         view_ht = ht.view(batch_size*max_length, -1)
         assert view_ht.size(1) == conv_ht.size(2)
 
-        logits = self.mlp_decoder(input=view_ht)
+        logits = F.relu(self.mlp_decoder_hidden(input=view_ht))
+        logits = self.dropout(logits)
+        logits = self.mlp_decoder(logits)
+
         return logits
 
-    def generate(self, input):
+    def generate(self, input, teacher_sentence=None, length=None):
 
-        batch_size = input.size(0)
-        assert batch_size == 1, "While generating, input should have a batch size of 1 is {}".format(batch_size)
+        with torch.no_grad():
+            batch_size = input.size(0)
+            assert batch_size == 1, "While generating, input should have a batch size of 1 is {}".format(batch_size)
 
-        out = self.conv_net(input)
+            out = self.conv_net(input)
 
-        is_last_word = False
-        last_ht = out.view(1, 1, -1)
-        next_token = torch.empty(batch_size, 1).fill_(self.BEGIN_TOKEN).long().to(self.device)
+            is_last_word = False
+            last_ht = out.view(1, -1)
+            last_ht = last_ht.unsqueeze(0)
 
-        generated_token = []
-        while not is_last_word:
-            next_input = self.word_embedder(next_token)
-            _, last_ht = self.rnn_decoder(input=next_input, hx=last_ht)
-            softmax_token = F.softmax(self.mlp_decoder(last_ht.view(1, -1)), dim=1)
-            _, next_token = torch.max(softmax_token, dim=1)
+            next_token = torch.empty(batch_size, 1).fill_(self.BEGIN_TOKEN).long().to(self.device)
 
-            if next_token == self.END_TOKEN or len(generated_token) > self.generator_max_len:
-                is_last_word = True
-            else:
-                generated_token.append(next_token.item())
+            generated_token = []
+            while not is_last_word:
+                next_input = F.relu(self.word_embedder(next_token))
+                ht, last_ht = self.rnn_decoder(input=next_input, hx=last_ht)
+                hidden_activation = F.relu(self.mlp_decoder_hidden(ht[0]))
+                logits_token = self.mlp_decoder(hidden_activation)
+                next_token = logits_token.argmax(dim=1)
 
-            next_token = next_token.unsqueeze(0)
+                if next_token == self.END_TOKEN or len(generated_token) > self.generator_max_len:
+                    is_last_word = True
+                else:
+                    generated_token.append(next_token.item())
+
+                next_token = next_token.unsqueeze(0)
 
         return torch.LongTensor(generated_token)
-
 
 
 

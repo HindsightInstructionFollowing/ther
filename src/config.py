@@ -82,8 +82,9 @@ def load_config(env_config_file, model_config_file, seed,
         config_file = open(env_config_path, 'w')
         json.dump(obj=env_config, fp=config_file)
     else:
-        check_json_intregrity(config_file_path=env_config_path,
-                              config_dict=env_config)
+        if "osef" not in env_path: # Osef is the test setting, to avoid manually deleting
+            check_json_intregrity(config_file_path=env_config_path,
+                                  config_dict=env_config)
 
     # === Loading MODEL config, extension and check integrity =====
     # ===========================================================
@@ -125,8 +126,9 @@ def load_config(env_config_file, model_config_file, seed,
         json.dump(obj=model_ext_config, fp=model_ext_config_file)
 
     else:
-        check_json_intregrity(config_file_path=model_config_path,
-                              config_dict=model_config)
+        if "osef" not in model_path:
+            check_json_intregrity(config_file_path=model_config_path,
+                                  config_dict=model_config)
 
     # Merge env and model config into one dict
     full_config = {**model_config, **env_config}

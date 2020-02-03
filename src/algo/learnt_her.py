@@ -3,6 +3,7 @@ from algo.neural_architecture import InstructionGenerator, compute_accuracy
 import numpy as np
 import torch
 import torch.nn.functional as F
+import pickle as pkl
 
 class LearntHindsightExperienceReplay(AbstractReplay):
     def __init__(self, input_shape, n_output, config, device, logger=None):
@@ -10,21 +11,17 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
         config = config["ther_params"]
 
-        # Force to take the last obs, not state
-        input_shape = list(input_shape)
-        input_shape[0] = 3
-
         self.instruction_generator = InstructionGenerator(input_shape=input_shape,
                                                           n_output=n_output,
                                                           config=config["architecture_params"],
                                                           device=device)
 
         # Self useful variable
-        self.update_steps =                    config["update_steps"]
+        self.update_steps                    = config["update_steps"]
         self.n_sample_before_using_generator = config["n_sample_before_using_generator"]
-        self.batch_size =                      config["batch_size"]
-        self.accuracy_convergence =            config["accuracy_convergence"] # Accuracy before generator is considered good
-        self.max_update_generator_per_epochs = config["max_update_per_epochs"]
+        self.batch_size                      = config["batch_size"]
+        self.tolerance                       = config["tolerance_convergence"]
+        self.max_steps_optim                 = config["max_steps_optim"]
 
         self.padding_value =                   2 # By convention, checked by Word2Idx in wrappers.py
         self.n_update_generator =              0 # Number of optim steps done on generator
@@ -46,7 +43,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
     def _cheat_check(self, true_mission, generated_mission):
 
         good_attributes = 0
-        for i in range(1,5):
+        for i in range(2,6):
             if true_mission[-i] in generated_mission:
                 good_attributes += 1
 
@@ -128,32 +125,35 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
             # If the agent succeeded, store the state/instruction pair to train the generator
             elif reward > 0:
-                self.generator_dataset["states"].append(current_state[:,-3:])
+                self.generator_dataset["states"].append(current_state)
                 self.generator_dataset["instructions"].append(mission)
                 self.generator_dataset["lengths"].append(mission.size(0))
+                pkl.dump(self.generator_dataset, open("generator_collected_dataset.pkl", "wb"))
 
             self._store_episode(self.current_episode)
             self.current_episode = []
 
     def _train_generator(self):
 
-        gen_update_this_epoch = 1
         convergence = False
-        accuracies = []
         len_dataset = len(self.generator_dataset["states"])
         # To speed batching, convert list to tensor
-        states = torch.cat(self.generator_dataset['states'])
         lengths = self.generator_dataset['lengths']
         instructions = self.generator_dataset["instructions"]
-        instructions, lengths = zip(*sorted(zip(instructions, lengths),
+        states = self.generator_dataset['states']
+
+        states, instructions, lengths = zip(*sorted(zip(states, instructions, lengths),
                                             key=lambda x: -x[0].size(0)))
 
+        states = torch.cat(states)
         lengths = torch.LongTensor(lengths)
         instructions = torch.nn.utils.rnn.pad_sequence(sequences=instructions,
                                                        batch_first=True,
                                                        padding_value=self.padding_value
                                                        )
 
+        losses = []
+        gen_update_this_epoch = 1
         while not convergence:
             batch_idx = np.random.choice(range(len_dataset), self.batch_size)
             batch_state, batch_lengths = states[batch_idx].to(self.device), lengths[batch_idx].to(self.device)
@@ -189,7 +189,6 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             instruction_label = instruction_label[indexes]
 
             accuracy = compute_accuracy(logits, instruction_label)
-            accuracies.append(accuracy)
 
             # Last round of test, check gradients and size
             assert logits.requires_grad is True
@@ -202,19 +201,25 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             loss.backward()
             self.optimizer.step()
 
-            if self.logger and gen_update_this_epoch % 1000 == 0:
+            if self.logger and gen_update_this_epoch % 5000 == 0:
                 self.logger.add_scalar("gen/generator_loss", loss.detach().item(), self.n_update_generator)
                 self.logger.add_scalar("gen/generator_accuracy", accuracy, self.n_update_generator)
 
             self.n_update_generator += 1
             gen_update_this_epoch += 1
-            del loss
+            losses.append(loss.item())
 
-            if np.mean(accuracies[-10:]) > self.accuracy_convergence or gen_update_this_epoch > self.max_update_generator_per_epochs:
-                convergence = True
+            # Convergence test
+            convergence_sample = 10
+            if len(losses) > convergence_sample * 3:
+                mean_1 = np.mean(losses[-convergence_sample:-convergence_sample//2])
+                mean_2 = np.mean(losses[convergence_sample//2:-1])
+                convergence = (np.abs(mean_1 - mean_2) < self.tolerance) or gen_update_this_epoch > self.max_steps_optim
 
-        print("Done training generator in {} steps\nLast accuracies : {}".format(self.n_update_generator, accuracies[-10:]))
+            if self.n_update_generator % 50 == 1:
+                print("Iter #{}, loss {}, accuracy {}".format(self.n_update_generator, losses[-1], accuracy))
 
+        print("Done training generator in {} steps\nAccuracy : {} loss : {}".format(self.n_update_generator, accuracy, losses[-1]))
 
 class LearntHindsightRecurrentExperienceReplay(LearntHindsightExperienceReplay):
 
@@ -241,48 +246,4 @@ class LearntHindsightRecurrentExperienceReplay(LearntHindsightExperienceReplay):
 
 
 if __name__ == "__main__":
-    import pickle as pkl
-    import random
-    import json
-
-    vocab = json.load(open("gym-minigrid/gym_minigrid/envs/missions/vocab_fetch.json", "r"))
-    i2w = list(vocab["vocabulary"].keys())
-
-    input_shape = (4,7,7)
-    n_output = 27
-    config = {
-        "hindsight_reward" : 0.8,
-        "use_her" : False,
-        "size" : 40000,
-        "ther_params": {
-            "accuracy_convergence": 0.95,
-            "lr": 3e-4,
-            "batch_size": 4,
-            "weight_decay": 0,
-            "update_steps": [30, 300, 1000],
-            "n_sample_before_using_generator": 300,
-
-            "architecture_params": {
-                "conv_layers_channel": [16, 32, 64],
-                "conv_layers_size": [2, 2, 2],
-                "conv_layers_stride": [1, 1, 1],
-                "max_pool_layers": [2, 0, 0],
-                "embedding_dim": 32,
-                "generator_max_len": 10
-            }
-        }}
-
-    replay = LearntHindsightExperienceReplay(input_shape, n_output, config, 'cpu')
-    replay.generator_dataset = pkl.load(open("gen_dataset.pkl", "rb"))
-    replay._train_generator()
-
-    while True:
-        state = random.choice(replay.generator_dataset["states"])
-        instruction = replay.instruction_generator.generate(state)
-
-        print(state)
-        raw_instruction = []
-        for word in instruction:
-            raw_instruction.append(i2w[word])
-        print(raw_instruction)
-        input()
+    pass

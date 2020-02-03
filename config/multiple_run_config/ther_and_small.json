@@ -1,0 +1,96 @@
+[
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "ther_test.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "ther_test2.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "ther_test3.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "less_update.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "less_update2.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "less_update3.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "less_update4.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "less_update5.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "less_update6.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "less_update.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "less_update2.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "less_update3.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "less_update4.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "less_update5.json"
+  },
+
+  {
+    "model_config": "conv_fetch_minigrid.json",
+    "env_config": "minigrid_fetch_4att_10o.json",
+    "model_ext" : "less_update6.json"
+  }
+
+
+
+
+
+]

@@ -1,8 +1,14 @@
 {
-  "name" : "target_up10000",
+  "name" : "smaller_buffer_up2000_explo_300000",
 
   "algo_params": {
-    "update_target_every" : 10000
+
+    "experience_replay_config" : {
+      "size" : 30000
+    },
+
+    "update_target_every" : 2000,
+    "step_exploration" : 300000
   }
 }
 

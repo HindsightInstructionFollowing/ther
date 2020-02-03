@@ -8,6 +8,12 @@
   "algo_params": {
     "architecture" : "conv_lstm",
     "architecture_params" : {
+
+      "conv_layers_channel" : [32,64,128],
+      "conv_layers_size" : [2,2,2],
+      "conv_layers_stride" : [1,1,1],
+      "max_pool_layers" : [2,0,0],
+
       "use_gated_attention" : false,
       "projection_after_conv" : 0,
 
@@ -15,9 +21,9 @@
       "rnn_state_hidden_size" : 512,
       "word_embedding_size" : 32,
 
-      "rnn_text_hidden_size" : 128,
-      "fc_text_embedding_hidden" : 32,
-      "last_hidden_fc_size" : 128
+      "rnn_text_hidden_size" : 512,
+      "fc_text_embedding_hidden" : 256,
+      "last_hidden_fc_size" : 256
     },
 
     "experience_replay_config" : {
@@ -29,11 +35,13 @@
       "use_compression" : false,
 
       "ther_params" : {
-        "accuracy_convergence" : 0.9,
+        "max_steps_optim" : 100000,
+        "tolerance_convergence" : 1e-4,
         "lr" : 3e-4,
         "batch_size" : 64,
         "weight_decay" : 1e-4,
         "update_steps": 100,
+
         "n_sample_before_using_generator" : 300,
         "max_update_per_epochs" : 2000,
 
@@ -43,8 +51,9 @@
           "conv_layers_stride" : [1,1,1],
           "max_pool_layers" : [2,0,0],
           "embedding_dim" : 32,
-          "generator_max_len" : 10
-
+          "generator_max_len" : 10,
+          "dropout" : 0.2,
+          "decoder_hidden" : 128
         }
       }
     },
