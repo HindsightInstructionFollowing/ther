@@ -286,13 +286,14 @@ class BaseDoubleDQN(nn.Module):
 
             done = False
             obs = self.env.reset()
+            obs["last_action"] = 0
             iter_this_ep = 0
             reward_this_ep = 0
             begin_ep_time = time.time()
             ht = None
 
             while not done:
-                act, q_values, ht = self.select_action(obs, ht)
+                act, q_values, ht = self.select_action(obs, ht) # Todo change signature
                 new_obs, reward, done, info = self.env.step(act)
 
                 iter_this_ep += 1

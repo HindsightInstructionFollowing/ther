@@ -1,0 +1,13 @@
+{
+  "name" : "buffer_10000",
+
+  "algo_params": {
+
+    "experience_replay_config" : {
+      "size" : 10000
+    }
+  }
+}
+
+
+

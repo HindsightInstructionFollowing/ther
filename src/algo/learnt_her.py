@@ -5,6 +5,8 @@ import torch
 import torch.nn.functional as F
 import pickle as pkl
 
+from nltk.translate import bleu_score
+
 class LearntHindsightExperienceReplay(AbstractReplay):
     def __init__(self, input_shape, n_output, config, device, logger=None):
         super().__init__(config)
@@ -20,8 +22,8 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         self.update_steps                    = config["update_steps"]
         self.n_sample_before_using_generator = config["n_sample_before_using_generator"]
         self.batch_size                      = config["batch_size"]
-        self.tolerance                       = config["tolerance_convergence"]
         self.max_steps_optim                 = config["max_steps_optim"]
+        self.accuracy_convergence            = config["accuracy_convergence"]
 
         self.padding_value =                   2 # By convention, checked by Word2Idx in wrappers.py
         self.n_update_generator =              0 # Number of optim steps done on generator
@@ -99,15 +101,28 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                 last_state =      last_transition.current_state
 
                 # todo : in the long run, should take the whole trajectory as input
-                last_state = last_state[:, -3:].to(self.device)
+                last_state = self.compressor.decompress_elem(last_state).to(self.device)
                 generated_hindsight_mission = self.instruction_generator.generate(last_state)
 
                 if last_state.size(2) == 7: # Check only for minigrid (vizdoom instruction are different)
                     n_correct_attrib = self._cheat_check(true_mission=hindsight_mission,
                                                          generated_mission=generated_hindsight_mission)
-
                     self.logger.log("gen/n_correct_attrib_gen", n_correct_attrib)
-                    self.generator_usage += 1
+
+
+                score_bleu = bleu_score.sentence_bleu(references=[hindsight_mission],
+                                                      hypothesis=generated_hindsight_mission,
+                                                      smoothing_function=bleu_score.SmoothingFunction().method2,
+                                                      weights=(0.5,0.5))
+
+                bleu1 = bleu_score.sentence_bleu(references=[hindsight_mission],
+                                                 hypothesis=generated_hindsight_mission,
+                                                 smoothing_function=bleu_score.SmoothingFunction().method2,
+                                                 weights=[1])
+
+
+                self.logger.log("gen/bleu_score", score_bleu)
+                self.generator_usage += 1
 
                 # Substitute the old mission with the new one, change the reward at the end of episode
                 hindsight_episode = []
@@ -153,7 +168,9 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                                                        )
 
         losses = []
+        accuracies = []
         gen_update_this_epoch = 1
+        self.instruction_generator.train()
         while not convergence:
             batch_idx = np.random.choice(range(len_dataset), self.batch_size)
             batch_state, batch_lengths = states[batch_idx].to(self.device), lengths[batch_idx].to(self.device)
@@ -201,25 +218,28 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             loss.backward()
             self.optimizer.step()
 
-            if self.logger and gen_update_this_epoch % 5000 == 0:
+            if self.logger and self.n_update_generator % 5000 == 0:
                 self.logger.add_scalar("gen/generator_loss", loss.detach().item(), self.n_update_generator)
                 self.logger.add_scalar("gen/generator_accuracy", accuracy, self.n_update_generator)
 
             self.n_update_generator += 1
             gen_update_this_epoch += 1
             losses.append(loss.item())
+            accuracies.append(accuracy)
 
             # Convergence test
             convergence_sample = 10
-            if len(losses) > convergence_sample * 3:
-                mean_1 = np.mean(losses[-convergence_sample:-convergence_sample//2])
-                mean_2 = np.mean(losses[convergence_sample//2:-1])
-                convergence = (np.abs(mean_1 - mean_2) < self.tolerance) or gen_update_this_epoch > self.max_steps_optim
+            if len(losses) > convergence_sample:
+                convergence = gen_update_this_epoch > self.max_steps_optim \
+                              or np.mean(accuracies[-10:]) > self.accuracy_convergence
 
             if self.n_update_generator % 50 == 1:
                 print("Iter #{}, loss {}, accuracy {}".format(self.n_update_generator, losses[-1], accuracy))
 
         print("Done training generator in {} steps\nAccuracy : {} loss : {}".format(self.n_update_generator, accuracy, losses[-1]))
+        if self.logger:
+            self.logger.add_scalar("gen/generator_loss", loss.detach().item(), self.n_update_generator)
+            self.logger.add_scalar("gen/generator_accuracy", accuracy, self.n_update_generator)
 
 class LearntHindsightRecurrentExperienceReplay(LearntHindsightExperienceReplay):
 

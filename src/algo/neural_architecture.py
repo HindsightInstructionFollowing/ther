@@ -128,6 +128,12 @@ class MinigridRecurrentPolicy(nn.Module):
         else:
             self.size_after_text_viz_merge = self.size_after_conv
 
+        # ======== ADD ACTION ======
+        self.use_action_rnn = False
+        if self.use_action_rnn:
+            # Create action embedding to add to the rnn
+            pass
+
         # ============== PROJECT TEXT AND VISION ? ===============
         # ========================================================
         projection_size = config["projection_after_conv"]
@@ -205,6 +211,11 @@ class MinigridRecurrentPolicy(nn.Module):
 
             else:
                 flatten_vision_and_text = torch.cat((flatten_vision_and_text, out_text), dim=1)
+
+        # ======== ADD ACTION =====
+        if self.use_action_rnn:
+            pass
+
 
         # ======= PROJECTION ========
         flatten_vision_and_text = self.projection_after_merge(flatten_vision_and_text)
@@ -427,12 +438,14 @@ class InstructionGenerator(nn.Module):
         self.vocabulary_size = n_output
         self.generator_max_len = config["generator_max_len"]
 
-        channel_list =  config["conv_layers_channel"]
-        kernel_list =   config["conv_layers_size"]
-        stride_list =   config["conv_layers_stride"]
-        max_pool_list = config["max_pool_layers"]
-        dropout =       config["dropout"]
-        hidden_size =   config["decoder_hidden"]
+        channel_list =          config["conv_layers_channel"]
+        kernel_list =           config["conv_layers_size"]
+        stride_list =           config["conv_layers_stride"]
+        max_pool_list =         config["max_pool_layers"]
+        projection_after_conv = config["projection_after_conv"]
+
+        dropout =               config["dropout"]
+        hidden_size =           config["decoder_hidden"]
 
         # Not being used at the moment
         # self.teacher_forcing_ratio = config["teacher_forcing"]
@@ -446,11 +459,16 @@ class InstructionGenerator(nn.Module):
                                           embedding_dim=config["embedding_dim"],
                                           padding_idx=2)
 
+        if projection_after_conv:
+            self.project_after_conv = nn.Linear(size_after_conv, projection_after_conv)
+            size_after_conv = projection_after_conv
+        else:
+            self.project_after_conv = lambda x:x
+
         self.rnn_decoder = nn.GRU(input_size=config["embedding_dim"],
                                   hidden_size=int(size_after_conv),
                                   num_layers=1,
-                                  batch_first=True,
-                                  dropout=0)
+                                  batch_first=True)
 
         self.mlp_decoder_hidden = nn.Linear(in_features=int(size_after_conv), out_features=hidden_size)
         self.mlp_decoder = nn.Linear(in_features=hidden_size, out_features=n_output)
@@ -468,6 +486,7 @@ class InstructionGenerator(nn.Module):
 
         conv_ht = self.conv_net(states)
         conv_ht = conv_ht.view(batch_size, -1)
+        conv_ht = self.project_after_conv(conv_ht.view(1, -1))
 
         # hx size is (num_layers*num_directions, batch_size, hidden_size), 1 layer and 1 direction in this architecture
         conv_ht = conv_ht.unsqueeze(0) # Adding num_layer*directions dimension
@@ -494,17 +513,18 @@ class InstructionGenerator(nn.Module):
 
         return logits
 
-    def generate(self, input, teacher_sentence=None, length=None):
+    def generate(self, input):
 
+        self.eval()
         with torch.no_grad():
             batch_size = input.size(0)
             assert batch_size == 1, "While generating, input should have a batch size of 1 is {}".format(batch_size)
 
             out = self.conv_net(input)
+            out = self.project_after_conv(out.view(1, -1))
 
             is_last_word = False
-            last_ht = out.view(1, -1)
-            last_ht = last_ht.unsqueeze(0)
+            last_ht = out.unsqueeze(0)
 
             next_token = torch.empty(batch_size, 1).fill_(self.BEGIN_TOKEN).long().to(self.device)
 

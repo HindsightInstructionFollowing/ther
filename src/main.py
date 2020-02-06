@@ -17,7 +17,7 @@ from env_utils import create_doom_env, AttrDict
 
 import ray
 
-#@ray.remote(num_gpus=0.33)
+@ray.remote(num_gpus=0.33)
 def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_test):
 
     # =================== CONFIGURATION==================
@@ -173,10 +173,10 @@ if __name__ == "__main__":
     #
     # ray.get(res)
 
-    start_experiment(env_config=args.env_config,
-                     model_config=args.model_config,
-                     model_ext=args.model_ext,
-                     exp_dir=args.exp_dir,
-                     seed=args.seed,
-                     local_test=args.local_test
-                     )
+    start_experiment._function(env_config=args.env_config,
+                               model_config=args.model_config,
+                               model_ext=args.model_ext,
+                               exp_dir=args.exp_dir,
+                               seed=args.seed,
+                               local_test=args.local_test
+                               )

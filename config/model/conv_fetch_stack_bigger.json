@@ -1,12 +1,12 @@
 {
-  "name" : "minigrid_fetch_action_rdddqn_bigger",
-  "algo" : "rdqn",
+  "name" : "minigrid_fetch_dddqn_stacked_bigger",
+  "algo" : "dqn",
   "device" : "cuda",
 
   "dump_log_every" : 30000,
 
   "algo_params": {
-    "architecture" : "conv_lstm",
+    "architecture" : "conv",
     "architecture_params" : {
 
       "conv_layers_channel" : [32,64,128],
@@ -14,16 +14,19 @@
       "conv_layers_stride" : [1,1,1],
       "max_pool_layers" : [2,0,0],
 
+      "ignore_text" : false,
       "use_gated_attention" : false,
+      "use_lstm_after_conv" : false,
+      "rnn_text_hidden_size" : 512,
+      "fc_text_embedding_hidden" : 128,
+
       "projection_after_conv" : 0,
 
-      "ignore_text" : false,
-      "rnn_state_hidden_size" : 512,
       "word_embedding_size" : 32,
-
-      "rnn_text_hidden_size" : 512,
-      "fc_text_embedding_hidden" : 256,
-      "last_hidden_fc_size" : 256
+      "last_hidden_fc_size" : 256,
+      "dueling_architecture" : true,
+      "learn_text" : true,
+      "use_memory" : false
     },
 
     "experience_replay_config" : {
@@ -43,11 +46,10 @@
         "batch_size" : 64,
         "weight_decay" : 1e-4,
         "update_steps": 100,
-
         "n_sample_before_using_generator" : 300,
 
         "architecture_params": {
-          "conv_layers_channel" : [16,32,64],
+          "conv_layers_channel" : [20,36,70],
           "conv_layers_size" : [2,2,2],
           "conv_layers_stride" : [1,1,1],
           "max_pool_layers" : [2,0,0],
@@ -55,6 +57,7 @@
           "generator_max_len" : 10,
           "dropout" : 0.2,
           "decoder_hidden" : 128
+
         }
       }
     },
@@ -62,8 +65,8 @@
     "n_parallel_env" : 1,
     "batch_size" : 128,
     "lr" : 1e-5,
-    "n_step" : 1,
     "gamma" : 0.99,
+    "n_step" : 1,
     "update_target_every" : 20000,
     "step_exploration" : 40000,
     "weight_decay" : 0
@@ -72,6 +75,7 @@
   "wrappers_model" : [
     {"name" : "RemoveUselessChannelWrapper", "params" : {}},
     {"name" : "RemoveUselessActionWrapper", "params" : {}},
+    {"name" : "FrameStackerWrapper", "params" : {"n_stack" : 4, "create_dim" :  false}},
     {"name" : "MinigridTorchWrapper", "params" : {"device" : "cuda"}}
   ]
 

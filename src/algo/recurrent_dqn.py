@@ -99,17 +99,16 @@ class RecurrentDQN(BaseDoubleDQN):
 
         return batch_dict
 
-    def optimize_model(self, state=None, action=None, next_state=None, reward=None, done=None):
-        if state is not None:
-            hindsight_mission = next_state["hindsight_mission"] if "hindsight_mission" in next_state else None
-            self.replay_buffer.add_transition(current_state=state["image"].cpu(),
-                                              action=action,
-                                              next_state=next_state["image"].cpu(),
-                                              reward=reward,
-                                              mission=next_state["mission"][0].cpu(),
-                                              mission_length=next_state["mission_length"].cpu(),
-                                              terminal=done,
-                                              hindsight_mission=hindsight_mission)
+    def optimize_model(self, state, action, next_state, reward, done):
+        hindsight_mission = next_state["hindsight_mission"] if "hindsight_mission" in next_state else None
+        self.replay_buffer.add_transition(current_state=state["image"].cpu(),
+                                          action=action,
+                                          next_state=next_state["image"].cpu(),
+                                          reward=reward,
+                                          mission=next_state["mission"][0].cpu(),
+                                          mission_length=next_state["mission_length"].cpu(),
+                                          terminal=done,
+                                          hindsight_mission=hindsight_mission)
 
         if len(self.replay_buffer) < self.batch_size:
             return 0
@@ -151,6 +150,8 @@ class RecurrentDQN(BaseDoubleDQN):
         }
 
         # Double DQN : Selection of the action with the policy net
+
+        # todo : SEND ACTION HERE
         q_values_for_action, _ = self.policy_net(batch_next_state_non_terminal_dict)
         q_values_next_state, _ = self.target_net(batch_next_state_non_terminal_dict)
 

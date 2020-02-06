@@ -9,16 +9,20 @@ import torch
 import cv2
 
 class DummyCompressor(object):
+    def compress_elem(self, elem):
+        return elem
+    def decompress_elem(self, elem):
+        return elem
     def compress_transition(self, transition):
         return transition
     def decompress_transition(self, transition):
         return transition
 
-class TransitionCompressor(object):
+class TransitionCompressor(DummyCompressor):
     def compress_elem(self, elem):
         return blosc.pack_array(elem)
     def decompress_elem(self, elem):
-        return blosc.unpack_array(elem)
+        return torch.Tensor(blosc.unpack_array(elem))
     def compress_transition(self, transition):
         """
         Expected type is a torch.tensor, convert it to numpy here
@@ -37,10 +41,10 @@ class TransitionCompressor(object):
 
     def decompress_transition(self, transition):
 
-        compressed_transitions = basic_transition(current_state=torch.Tensor(self.decompress_elem(transition.current_state)),
+        compressed_transitions = basic_transition(current_state=self.decompress_elem(transition.current_state),
                                                   action=transition.action,
                                                   reward=transition.reward,
-                                                  next_state=torch.Tensor(self.decompress_elem(transition.next_state)),
+                                                  next_state=self.decompress_elem(transition.next_state),
                                                   terminal=transition.terminal,
                                                   mission=transition.mission,
                                                   mission_length=transition.mission_length,
@@ -57,7 +61,7 @@ class TransitionCompressorPNG(TransitionCompressor):
     def decompress_elem(self, elem):
         im = cv2.imdecode(elem, cv2.IMREAD_COLOR)
         elem = np.expand_dims(im.swapaxes(1,0).swapaxes(2,0), 0)
-        return elem
+        return torch.Tensor(elem)
 
 
 class TransitionCompressorTest(TransitionCompressor):

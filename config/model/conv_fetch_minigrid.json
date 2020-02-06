@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_fetch_dddqn_frame_stacking_up20000",
+  "name" : "minigrid_fetch_dddqn_stacking",
   "algo" : "dqn",
   "device" : "cuda",
 
@@ -9,10 +9,11 @@
     "architecture" : "conv",
     "architecture_params" : {
 
-      "conv_layers_channel" : [20,36,70],
+      "conv_layers_channel" : [16,32,64],
       "conv_layers_size" : [2,2,2],
       "conv_layers_stride" : [1,1,1],
       "max_pool_layers" : [2,0,0],
+
 
       "ignore_text" : false,
       "use_gated_attention" : false,
@@ -38,12 +39,13 @@
       "use_compression" : false,
 
       "ther_params" : {
-        "max_steps_optim" : 100000,
-        "tolerance_convergence" : 1e-4,
+        "accuracy_convergence" : 0.9,
+        "max_steps_optim" : 2000,
+
         "lr" : 3e-4,
-        "batch_size" : 64,
-        "weight_decay" : 1e-4,
-        "update_steps": 100,
+        "batch_size" : 128,
+        "weight_decay" : 1e-3,
+        "update_steps": 150,
         "n_sample_before_using_generator" : 300,
 
         "architecture_params": {
@@ -51,11 +53,13 @@
           "conv_layers_size" : [2,2,2],
           "conv_layers_stride" : [1,1,1],
           "max_pool_layers" : [2,0,0],
+
+          "projection_after_conv" : 0,
+
           "embedding_dim" : 32,
           "generator_max_len" : 10,
-          "dropout" : 0.2,
-          "decoder_hidden" : 128
-
+          "dropout": 0.5,
+          "decoder_hidden": 256
         }
       }
     },

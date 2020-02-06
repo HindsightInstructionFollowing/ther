@@ -36,20 +36,27 @@
 
       "ther_params" : {
         "accuracy_convergence" : 0.9,
+        "max_steps_optim" : 10000,
+
         "lr" : 3e-4,
-        "batch_size" : 64,
-        "weight_decay" : 1e-4,
-        "update_steps": 100,
+        "batch_size" : 128,
+        "weight_decay" : 1e-3,
+        "update_steps": 150,
         "n_sample_before_using_generator" : 300,
-        "max_update_per_epochs" : 2000,
 
         "architecture_params": {
-          "conv_layers_channel" : [16,32,64],
-          "conv_layers_size" : [2,2,2],
-          "conv_layers_stride" : [1,1,1],
-          "max_pool_layers" : [2,0,0],
+          "conv_layers_channel" : [25, 50, 75],
+          "conv_layers_size" : [8,4,4],
+          "conv_layers_stride" : [4,2,2],
+          "max_pool_layers" : [0,0,0],
+
+          "projection_after_conv" : 1024,
+
           "embedding_dim" : 32,
-          "generator_max_len" : 10
+          "generator_max_len" : 10,
+
+          "dropout" : 0.5,
+          "decoder_hidden" : 256
 
         }
       }

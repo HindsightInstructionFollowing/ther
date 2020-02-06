@@ -3,6 +3,8 @@ import random
 from algo.learnt_her import LearntHindsightRecurrentExperienceReplay
 import torch
 
+from nltk.translate import bleu_score
+
 config = {
     "hindsight_reward": 0.8,
     "use_her": False,
@@ -13,13 +15,15 @@ config = {
     "use_compression" : False,
 
     "ther_params": {
+        "accuracy_convergence": 1,
         "max_steps_optim" : 2000,
+        "tolerance_convergence": 1e-5,
+
         "lr": 3e-4,
-        "batch_size": 64,
-        "weight_decay": 1e-4,
+        "batch_size": 128,
+        "weight_decay": 1e-3,
         "update_steps": [30, 300, 1000],
         "n_sample_before_using_generator": 300,
-        "tolerance_convergence": 1e-5,
 
         "architecture_params": {
             "conv_layers_channel": [32, 64, 128],
@@ -29,8 +33,8 @@ config = {
             "embedding_dim": 32,
             "generator_max_len": 10,
 
-            "dropout": 0.2,
-            "decoder_hidden" : 128
+            "dropout": 0.5,
+            "decoder_hidden" : 256
         }
     }}
 
@@ -58,10 +62,8 @@ replay.generator_dataset = {
 
 while True:
 
-    replay.instruction_generator.train()
     replay._train_generator()
     predicted_list = []
-    replay.instruction_generator.train(mode=False)
 
     for test_state, test_instruction, length in \
             zip(full_dataset["states"][n_sample:], full_dataset["instructions"][n_sample:], full_dataset["lengths"][n_sample:]):
@@ -69,5 +71,13 @@ while True:
         test_state = torch.Tensor(test_state).to(device)
 
         generated_instruction = replay.instruction_generator.generate(test_state, test_instruction, length)
-        predicted_list.append(replay._cheat_check(true_mission=test_instruction, generated_mission=generated_instruction))
+        #predicted_list.append(replay._cheat_check(true_mission=test_instruction, generated_mission=generated_instruction))
+        score_bleu = bleu_score.sentence_bleu(references=[test_instruction],
+                                              hypothesis=generated_instruction,
+                                              smoothing_function=bleu_score.SmoothingFunction().method2,
+                                              weights=(0.5, 0.5))
+
     print("Mean cheat check", sum(predicted_list) / len(predicted_list))
+
+
+

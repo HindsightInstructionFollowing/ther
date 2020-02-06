@@ -1,0 +1,20 @@
+[
+  {
+    "model_config": "conv_vizdoom_recurrent.json",
+    "env_config": "vizdoom_easy.json",
+    "model_ext" : "ther_test.json"
+  },
+
+  {
+    "model_config": "conv_vizdoom_recurrent.json",
+    "env_config": "vizdoom_easy.json",
+    "model_ext" : "ther_test2.json"
+  },
+
+  {
+    "model_config": "conv_vizdoom_recurrent.json",
+    "env_config": "vizdoom_easy.json",
+    "model_ext" : "ther_test3.json"
+  }
+
+]
