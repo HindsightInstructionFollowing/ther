@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_fetch_rdddqn_proj_bigger_gated",
+  "name" : "doom_rdddqn_proj_bigger_gated",
   "algo" : "rdqn",
   "device" : "cuda",
 

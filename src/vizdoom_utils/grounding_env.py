@@ -18,6 +18,8 @@ from vizdoom_utils.points import *
 from vizdoom_utils.constants import *
 import gym
 
+import random
+
 actions = [[True, False, False], [False, True, False], [False, False, True]]
 
 ObjectLocation = collections.namedtuple("ObjectLocation", ["x", "y"])
@@ -35,6 +37,7 @@ class GroundingEnv(gym.core.Env):
         self.logger = logger
 
         # Reading train and test instructions.
+        self.all_instructions = self.get_instr(self.params.all_instr_file)
         self.train_instructions = self.get_instr(self.params.train_instr_file)
         self.test_instructions = self.get_instr(self.params.test_instr_file)
 
@@ -127,6 +130,17 @@ class GroundingEnv(gym.core.Env):
             object_id, pos_x, pos_y in
             zip(object_ids, object_x_coordinates, object_y_coordinates)]
 
+        # For hindsight target : object id present in the scene
+        self.objects_id = object_ids
+
+        self.object2instruction = {}
+        for instruction in self.all_instructions:
+            for obj in instruction['targets']:
+                if obj in self.object2instruction:
+                    self.object2instruction[obj].append(instruction['instruction'])
+                else:
+                    self.object2instruction[obj] =     [instruction['instruction']]
+
         pause_game(self.game, 1)
 
         screen = self.game.get_state().screen_buffer
@@ -172,6 +186,9 @@ class GroundingEnv(gym.core.Env):
             or reward != self.params.living_reward else False
 
         hindsight_mission = None
+
+        # ========== RETRIEVE HINDSIGHT MISSION ============
+        # ==================================================
         if reward == WRONG_OBJECT_REWARD:
             for i, object_location in enumerate(self.object_coordinates):
                 if i == self.correct_location:
@@ -179,12 +196,22 @@ class GroundingEnv(gym.core.Env):
                 dist = get_l2_distance(self.agent_x, self.agent_y,
                                        object_location.x, object_location.y)
                 if dist <= REWARD_THRESHOLD_DISTANCE:
-                    wrong_obj = self.get_objects_info()[i]
-                    hindsight_mission = "Go to the"
-                    if wrong_obj.relative_size is not None:
-                        hindsight_mission += ' {}'.format(wrong_obj.relative_size.lower())
+                    wrong_obj_name = self.get_objects_info()[self.objects_id[i]].name
+                    all_obj_name = [self.get_objects_info()[i].name for i in self.objects_id]
 
-                    hindsight_mission += " {} {}".format(wrong_obj.color.lower(),wrong_obj.type.lower())
+                    # If there are any doubles (or triples) remove all duplicates
+                    while wrong_obj_name in all_obj_name:
+                        all_obj_name.pop(all_obj_name.index(wrong_obj_name))
+
+                    possible_instruction = set(self.object2instruction[wrong_obj_name])
+                    for instruction in self.object2instruction[wrong_obj_name]:
+                        for obj in all_obj_name:
+                            if instruction in self.object2instruction[obj]:
+                                if instruction in possible_instruction:
+                                    possible_instruction.remove(instruction)
+
+                    assert len(possible_instruction) > 0, "Can't find instruction that describes this object"
+                    hindsight_mission = random.sample(possible_instruction, 1)[0]
                     break
 
         screen = self.game.get_state().screen_buffer
@@ -383,7 +410,7 @@ class GroundingEnv(gym.core.Env):
         return instruction, instruction_id
 
     def get_word_to_idx(self):
-        word_to_idx = dict([("<BEG>",0), ("<END>",1) , ("<PAD>",2), ('column', 3), ('card', 4)])
+        word_to_idx = dict([("<BEG>",0), ("<END>",1) , ("<PAD>",2), ('column', 3), ('card', 4), ('skull', 5)])
         for instruction_data in self.train_instructions:
             instruction = instruction_data['instruction']
             for word in instruction.split(" "):

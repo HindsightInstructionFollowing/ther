@@ -486,7 +486,7 @@ class InstructionGenerator(nn.Module):
 
         conv_ht = self.conv_net(states)
         conv_ht = conv_ht.view(batch_size, -1)
-        conv_ht = self.project_after_conv(conv_ht.view(1, -1))
+        conv_ht = self.project_after_conv(conv_ht)
 
         # hx size is (num_layers*num_directions, batch_size, hidden_size), 1 layer and 1 direction in this architecture
         conv_ht = conv_ht.unsqueeze(0) # Adding num_layer*directions dimension

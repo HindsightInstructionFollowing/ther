@@ -1,5 +1,5 @@
 {
-  "name" : "vizdoom_easiest",
+  "name" : "vizdoom_easiest_test",
   "gym_name" : null,
 
   "env_type" : "vizdoom",
@@ -15,15 +15,15 @@
     "difficulty" : "easy",
     "frame_width" : 128,
     "frame_height" : 128,
-    "visualize" : 0,
-    "sleep" : 0,
+    "visualize" : 1,
+    "sleep" : 0.2,
     "use_train_instructions" : 1,
-    "scenario_path" : "vizdoom_utils/maps/room.wad",
+    "scenario_path" : "src/vizdoom_utils/maps/room.wad",
     "interactive" : 0,
-    "all_instr_file" : "vizdoom_utils/data/all_instructions.json",
-    "train_instr_file" : "vizdoom_utils/data/instructions_easiest.json",
-    "test_instr_file" : "vizdoom_utils/data/instructions_test.json",
-    "object_size_file" : "vizdoom_utils/data/object_sizes.txt"
+    "all_instr_file" : "src/vizdoom_utils/data/all_instructions.json",
+    "train_instr_file" : "src/vizdoom_utils/data/instructions_train.json",
+    "test_instr_file" : "src/vizdoom_utils/data/instructions_test.json",
+    "object_size_file" : "src/vizdoom_utils/data/object_sizes.txt"
   },
 
   "wrappers_env" : [
