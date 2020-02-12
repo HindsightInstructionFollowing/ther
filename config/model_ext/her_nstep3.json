@@ -1,8 +1,9 @@
 {
-  "name" : "cheated_her_hindsight1_nstep3",
+  "name" : "buff4e4_nstep3_her",
 
   "algo_params": {
     "experience_replay_config" : {
+      "size" : 40000,
       "use_her" : true,
       "hindsight_reward" : 1
     },

@@ -1,15 +1,11 @@
 {
-  "name" : "buffer_30000_up5000",
+  "name" : "buffer_20000",
 
   "algo_params": {
 
     "experience_replay_config" : {
-      "size" : 30000
-    },
-
-    "update_target_every" : 5000,
-    "step_exploration" : 200000
-
+      "size" : 20000
+    }
   }
 }
 

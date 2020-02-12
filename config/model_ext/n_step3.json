@@ -1,8 +1,14 @@
 {
-  "name" : "nstep3",
+  "name" : "buff4e4_nstep3",
 
   "algo_params": {
+    "experience_replay_config" : {
+      "size" : 40000,
+      "hindsight_reward" : 1
+    },
+
     "n_step" : 3
+
   }
 }
 

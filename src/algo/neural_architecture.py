@@ -438,17 +438,17 @@ class InstructionGenerator(nn.Module):
         self.vocabulary_size = n_output
         self.generator_max_len = config["generator_max_len"]
 
-        channel_list =          config["conv_layers_channel"]
-        kernel_list =           config["conv_layers_size"]
-        stride_list =           config["conv_layers_stride"]
-        max_pool_list =         config["max_pool_layers"]
-        projection_after_conv = config["projection_after_conv"]
+        channel_list =                        config["conv_layers_channel"]
+        kernel_list =                         config["conv_layers_size"]
+        stride_list =                         config["conv_layers_stride"]
+        max_pool_list =                       config["max_pool_layers"]
+        projection_after_conv =               config["projection_after_conv"]
+        self.n_state_to_predict_instruction = config["n_state_to_predict_instruction"]
+        trajectory_encoding_rnn             = config["trajectory_encoding_rnn"]
 
         dropout =               config["dropout"]
         hidden_size =           config["decoder_hidden"]
 
-        # Not being used at the moment
-        # self.teacher_forcing_ratio = config["teacher_forcing"]
         self.conv_net, size_after_conv = conv_factory(input_shape=input_shape,
                                                       channels=channel_list,
                                                       kernels=kernel_list,
@@ -465,6 +465,12 @@ class InstructionGenerator(nn.Module):
         else:
             self.project_after_conv = lambda x:x
 
+        if self.n_state_to_predict_instruction > 1:
+            self.trajectory_encoding = nn.GRU(input_size=size_after_conv,
+                                              hidden_size=trajectory_encoding_rnn,
+                                              num_layers=1,
+                                              batch_first=True)
+
         self.rnn_decoder = nn.GRU(input_size=config["embedding_dim"],
                                   hidden_size=int(size_after_conv),
                                   num_layers=1,
@@ -480,20 +486,23 @@ class InstructionGenerator(nn.Module):
         :return: a tensor of instruction predicted by the network of size (batch_size * n_word_per_sequence, n_token)
         """
 
-        import copy
-        batch_size = teacher_sentence.size(0)
-        max_length = lengths.max().item()
+        batch_size = states.size(0)
+        states_seq_size = states.size(1)
+
+        sentence_max_length = lengths.max().item()
+
+        states = states.view(batch_size*states_seq_size, *states.size()[-3:])
 
         conv_ht = self.conv_net(states)
-        conv_ht = conv_ht.view(batch_size, -1)
+        conv_ht = conv_ht.view(batch_size * states_seq_size, -1)
         conv_ht = self.project_after_conv(conv_ht)
 
         # hx size is (num_layers*num_directions, batch_size, hidden_size), 1 layer and 1 direction in this architecture
         conv_ht = conv_ht.unsqueeze(0) # Adding num_layer*directions dimension
 
-        # Remove the last <pad> token as it's not useful to predict
-        # teacher_sentence_cut = teacher_sentence[:, :-1]
-        # lengths_reduced = lengths - 1
+        if self.n_state_to_predict_instruction > 1:
+            conv_ht = conv_ht.view(batch_size, states_seq_size, -1)
+            _, conv_ht = self.trajectory_encoding(conv_ht)
 
         embedded_sentences = F.relu(self.word_embedder(teacher_sentence))
         packed_embedded = torch.nn.utils.rnn.pack_padded_sequence(input=embedded_sentences,
@@ -504,7 +513,7 @@ class InstructionGenerator(nn.Module):
         # Compute all ht in a forward pass, teacher_forcing 100% of the time
         ht, _ = self.rnn_decoder(input=packed_embedded, hx=conv_ht)
         ht, _ = torch.nn.utils.rnn.pad_packed_sequence(ht, batch_first=True) # Unpack sequence
-        view_ht = ht.view(batch_size*max_length, -1)
+        view_ht = ht.view(batch_size*sentence_max_length, -1)
         assert view_ht.size(1) == conv_ht.size(2)
 
         logits = F.relu(self.mlp_decoder_hidden(input=view_ht))
@@ -517,16 +526,18 @@ class InstructionGenerator(nn.Module):
 
         self.eval()
         with torch.no_grad():
-            batch_size = input.size(0)
-            assert batch_size == 1, "While generating, input should have a batch size of 1 is {}".format(batch_size)
+
+            seq_len = input.size(0)
 
             out = self.conv_net(input)
-            out = self.project_after_conv(out.view(1, -1))
-
-            is_last_word = False
+            out = self.project_after_conv(out.view(seq_len, -1))
             last_ht = out.unsqueeze(0)
 
-            next_token = torch.empty(batch_size, 1).fill_(self.BEGIN_TOKEN).long().to(self.device)
+            if self.n_state_to_predict_instruction > 1:
+                _, last_ht = self.trajectory_encoding(last_ht.view(1, seq_len, -1))
+
+            is_last_word = False
+            next_token = torch.empty(1, 1).fill_(self.BEGIN_TOKEN).long().to(self.device)
 
             generated_token = []
             while not is_last_word:

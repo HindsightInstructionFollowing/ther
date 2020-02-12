@@ -13,27 +13,29 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
         config = config["ther_params"]
 
+        # Scheduling and usage
+        self.update_steps                    = config["update_steps"]
+        self.n_sample_before_using_generator = config["n_sample_before_using_generator"]
+
+        # Convention and usage variable
+        self.padding_value =                   2 # By convention, checked by Word2Idx in wrappers.py
+        self.n_state_to_predict_instruction =               config["n_state_to_predict_instruction"]
+
+        # Model mapping state(s) to an instruction
+        self.dummy_state = torch.zeros(input_shape).unsqueeze(0)
+        config["architecture_params"]["n_state_to_predict_instruction"] = self.n_state_to_predict_instruction
         self.instruction_generator = InstructionGenerator(input_shape=input_shape,
                                                           n_output=n_output,
                                                           config=config["architecture_params"],
                                                           device=device)
 
-        # Self useful variable
-        self.update_steps                    = config["update_steps"]
-        self.n_sample_before_using_generator = config["n_sample_before_using_generator"]
-        self.batch_size                      = config["batch_size"]
-        self.max_steps_optim                 = config["max_steps_optim"]
-        self.accuracy_convergence            = config["accuracy_convergence"]
-
-        self.padding_value =                   2 # By convention, checked by Word2Idx in wrappers.py
-        self.n_update_generator =              0 # Number of optim steps done on generator
-        self.generator_usage =                 0 # Number of time a sequence has been relabeled
-        self.generator_next_update =           self.update_steps
-
         # Loss and optimization
-        self.loss =      F.cross_entropy
-        self.optimizer = torch.optim.Adam(params=self.instruction_generator.parameters(),
-                                          lr=config["lr"], weight_decay=config["weight_decay"])
+        self.batch_size           = config["batch_size"]
+        self.max_steps_optim =      config["max_steps_optim"]
+        self.accuracy_convergence = config["accuracy_convergence"]
+        self.loss =                 F.cross_entropy
+        self.optimizer =            torch.optim.Adam(params=self.instruction_generator.parameters(),
+                                                     lr=config["lr"], weight_decay=config["weight_decay"])
 
 
         # Init generator dataset, device and logger
@@ -41,6 +43,9 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         self.generator_dataset = {'states': [], 'instructions': [], 'lengths': []}
         self.instruction_generator.to(self.device)
         self.logger = logger
+        self.n_update_generator = 0  # Number of optim steps done on generator
+        self.generator_usage = 0  # Number of time a sequence has been relabeled
+        self.generator_next_update =           self.update_steps
 
     def _cheat_check(self, true_mission, generated_mission):
 
@@ -97,14 +102,13 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             # Agent failed (reward <= 0), use the generator to compute the instruction performed by the agent
             if hindsight_mission and n_generator_example > self.n_sample_before_using_generator:
 
-                last_transition = self.current_episode[-1]
-                last_state =      last_transition.current_state
+                last_states =     self.current_episode[-self.n_state_to_predict_instruction:]
+                trajectory =      [self.compressor.decompress_elem(t.current_state) for t in last_states]
+                trajectory =      torch.cat(trajectory, dim=0).to(self.device)
 
-                # todo : in the long run, should take the whole trajectory as input
-                last_state = self.compressor.decompress_elem(last_state).to(self.device)
-                generated_hindsight_mission = self.instruction_generator.generate(last_state)
+                generated_hindsight_mission = self.instruction_generator.generate(trajectory)
 
-                if last_state.size(2) == 7: # Check only for minigrid (vizdoom instruction are different)
+                if trajectory.size(2) == 7: # Check only for minigrid (vizdoom instruction are different)
                     n_correct_attrib = self._cheat_check(true_mission=hindsight_mission,
                                                          generated_mission=generated_hindsight_mission)
                     self.logger.log("gen/n_correct_attrib_gen", n_correct_attrib)
@@ -121,7 +125,8 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                                                  weights=[1])
 
 
-                self.logger.log("gen/bleu_score", score_bleu)
+                self.logger.log("gen/bleu2", score_bleu)
+                self.logger.log("gen/bleu1", bleu1)
                 self.generator_usage += 1
 
                 # Substitute the old mission with the new one, change the reward at the end of episode
@@ -140,10 +145,17 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
             # If the agent succeeded, store the state/instruction pair to train the generator
             elif reward > 0:
-                self.generator_dataset["states"].append(current_state)
+                trajectory_to_predict = [self.compressor.decompress_elem(ep.current_state)
+                                         for ep in self.current_episode[-self.n_state_to_predict_instruction:]]
+
+                len_traj = len(trajectory_to_predict)
+                if len_traj < self.n_state_to_predict_instruction:
+                    trajectory_to_predict = [self.dummy_state] * (self.n_state_to_predict_instruction - len_traj) + trajectory_to_predict
+
+                self.generator_dataset["states"].append(torch.cat(trajectory_to_predict, dim=0).unsqueeze(0))
                 self.generator_dataset["instructions"].append(mission)
                 self.generator_dataset["lengths"].append(mission.size(0))
-                pkl.dump(self.generator_dataset, open("generator_collected_dataset.pkl", "wb"))
+                pkl.dump(self.generator_dataset, open("generator_dataset7.pkl", "wb"))
 
             self._store_episode(self.current_episode)
             self.current_episode = []
@@ -160,7 +172,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         states, instructions, lengths = zip(*sorted(zip(states, instructions, lengths),
                                             key=lambda x: -x[0].size(0)))
 
-        states = torch.cat(states)
+        states = torch.cat(states, dim=0)
         lengths = torch.LongTensor(lengths)
         instructions = torch.nn.utils.rnn.pad_sequence(sequences=instructions,
                                                        batch_first=True,
@@ -244,14 +256,12 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 class LearntHindsightRecurrentExperienceReplay(LearntHindsightExperienceReplay):
 
     def __init__(self, input_shape, n_output, config, device, logger=None):
-
         self.len_sum = 0
         super().__init__(input_shape=input_shape, n_output=n_output, config=config, device=device, logger=logger)
 
         self.episode_length = np.zeros(self.memory_size)
         self.transition_proba = np.zeros(self.memory_size)
         self.last_position = 0
-
 
     def _store_episode(self, episode_to_store):
         RecurrentReplayBuffer._store_episode(self, episode_to_store)

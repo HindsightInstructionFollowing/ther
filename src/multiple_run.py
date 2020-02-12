@@ -11,7 +11,6 @@ import ray
 
 from random import shuffle
 
-import os
 from config import read_multiple_ext_file, read_multiple_config_file, extend_multiple_seed
 
 if __name__ == "__main__":
