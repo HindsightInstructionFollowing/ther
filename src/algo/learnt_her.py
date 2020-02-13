@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import pickle as pkl
 
 from nltk.translate import bleu_score
+import time
 
 class LearntHindsightExperienceReplay(AbstractReplay):
     def __init__(self, input_shape, n_output, config, device, logger=None):
@@ -155,7 +156,8 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                 self.generator_dataset["states"].append(torch.cat(trajectory_to_predict, dim=0).unsqueeze(0))
                 self.generator_dataset["instructions"].append(mission)
                 self.generator_dataset["lengths"].append(mission.size(0))
-                pkl.dump(self.generator_dataset, open("generator_dataset7.pkl", "wb"))
+                if len(self.generator_dataset["states"]) % 10 == 0:
+                    pkl.dump(self.generator_dataset, open("generator_dataset7.pkl", "wb"))
 
             self._store_episode(self.current_episode)
             self.current_episode = []
@@ -182,6 +184,8 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         losses = []
         accuracies = []
         gen_update_this_epoch = 1
+        starting_time = time.time()
+
         self.instruction_generator.train()
         while not convergence:
             batch_idx = np.random.choice(range(len_dataset), self.batch_size)
@@ -246,7 +250,10 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                               or np.mean(accuracies[-10:]) > self.accuracy_convergence
 
             if self.n_update_generator % 50 == 1:
-                print("Iter #{}, loss {}, accuracy {}".format(self.n_update_generator, losses[-1], accuracy))
+                time_passed = time.time() - starting_time
+                print("Iter #{:05}, loss {:.4f}, accuracy {:.2f}, in {:.2f} ({:.3f} per step)".format(
+                    self.n_update_generator, losses[-1], accuracy, time_passed, time_passed / gen_update_this_epoch))
+
 
         print("Done training generator in {} steps\nAccuracy : {} loss : {}".format(self.n_update_generator, accuracy, losses[-1]))
         if self.logger:

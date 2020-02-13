@@ -62,7 +62,7 @@ class SweetLogger(SummaryWriter):
         """
         if total_step > self.next_dump_step:
             # Dump sentences
-            file_name = "sentences_count_step_{}_{}.json".format(self.next_dump_step, 'train' if train else 'test')
+            file_name = "sentences_count_step_{:08}_{}.json".format(self.next_dump_step, 'train' if train else 'test')
             sentences_path = path.join(self.path_to_log, file_name)
             json.dump(self.sentence_to_log, fp=open(sentences_path, 'w'), indent='    ', separators=('',':'))
 
@@ -79,7 +79,6 @@ class SweetLogger(SummaryWriter):
             self.next_dump_step += self.dump_step
             return True
         return False
-
 
     def reset(self):
         # Reset instructions

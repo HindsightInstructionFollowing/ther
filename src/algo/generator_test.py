@@ -67,7 +67,7 @@ input_shape = (3, 84, 84)
 n_output = 23
 
 full_dataset = pkl.load(open("generator_dataset7.pkl", "rb"))
-n_sample = int(0.20 * len(full_dataset["states"]))
+n_sample = int(0.80 * len(full_dataset["states"]))
 
 print("Number of samples : ", n_sample)
 
