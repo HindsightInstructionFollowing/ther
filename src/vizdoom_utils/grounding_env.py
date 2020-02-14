@@ -19,6 +19,7 @@ from vizdoom_utils.constants import *
 import gym
 
 import random
+import pickle as pkl
 
 actions = [[True, False, False], [False, True, False], [False, False, True]]
 
@@ -40,6 +41,17 @@ class GroundingEnv(gym.core.Env):
         self.all_instructions = self.get_instr(self.params.all_instr_file)
         self.train_instructions = self.get_instr(self.params.train_instr_file)
         self.test_instructions = self.get_instr(self.params.test_instr_file)
+
+        # To ease hindsight instruction, create translator from object to instruction
+        self.object2instruction = {}
+        for instruction in self.all_instructions:
+            for obj in instruction['targets']:
+                if obj in self.object2instruction:
+                    self.object2instruction[obj].append(instruction['instruction'])
+                else:
+                    self.object2instruction[obj] = [instruction['instruction']]
+
+        pkl.dump(self.object2instruction, open('saved_tools/obj2instructions.pkl', 'wb'))
 
         if self.params.use_train_instructions:
             self.instructions = self.train_instructions
@@ -97,6 +109,8 @@ class GroundingEnv(gym.core.Env):
         chosen_correct_object = [x for x in self.objects_info if
                                  x.name == self.objects[correct_object_id]][0]
 
+        self.correct_object_name = chosen_correct_object.name
+
         # Special code to handle 'largest' and 'smallest' since we need to
         # compute sizes for those particular instructions.
         if 'largest' not in self.mission \
@@ -133,21 +147,13 @@ class GroundingEnv(gym.core.Env):
         # For hindsight target : object id present in the scene
         self.objects_id = object_ids
 
-        self.object2instruction = {}
-        for instruction in self.all_instructions:
-            for obj in instruction['targets']:
-                if obj in self.object2instruction:
-                    self.object2instruction[obj].append(instruction['instruction'])
-                else:
-                    self.object2instruction[obj] =     [instruction['instruction']]
-
         pause_game(self.game, 1)
 
         screen = self.game.get_state().screen_buffer
         screen_buf = process_screen(screen, self.params.frame_height,
                                     self.params.frame_width)
 
-        state = (screen_buf, self.mission, None)
+        state = (screen_buf, self.mission, None, self.correct_object_name)
         reward = self.get_reward()
         is_final = False
         extra_args = None
@@ -218,7 +224,7 @@ class GroundingEnv(gym.core.Env):
         screen_buf = process_screen(
             screen, self.params.frame_height, self.params.frame_width)
 
-        state = (screen_buf, self.mission, hindsight_mission)
+        state = (screen_buf, self.mission, hindsight_mission, self.correct_object_name)
 
         if self.logger and is_final:
             self.logger.store_sentences(self.mission, reward)

@@ -101,6 +101,8 @@ class RecurrentDQN(BaseDoubleDQN):
 
     def optimize_model(self, state, action, next_state, reward, done):
         hindsight_mission = next_state["hindsight_mission"] if "hindsight_mission" in next_state else None
+        object_name = next_state["correct_obj_name"] if "correct_obj_name" in next_state else None
+
         self.replay_buffer.add_transition(current_state=state["image"].cpu(),
                                           action=action,
                                           next_state=next_state["image"].cpu(),
@@ -108,7 +110,8 @@ class RecurrentDQN(BaseDoubleDQN):
                                           mission=next_state["mission"][0].cpu(),
                                           mission_length=next_state["mission_length"].cpu(),
                                           terminal=done,
-                                          hindsight_mission=hindsight_mission)
+                                          hindsight_mission=hindsight_mission,
+                                          correct_obj_name=object_name)
 
         if len(self.replay_buffer) < self.batch_size:
             return 0

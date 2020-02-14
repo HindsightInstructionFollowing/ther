@@ -41,7 +41,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
         # Init generator dataset, device and logger
         self.device = device
-        self.generator_dataset = {'states': [], 'instructions': [], 'lengths': []}
+        self.generator_dataset = {'states': [], 'instructions': [], 'lengths': [], 'correct_obj_name' : []}
         self.instruction_generator.to(self.device)
         self.logger = logger
         self.n_update_generator = 0  # Number of optim steps done on generator
@@ -57,7 +57,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
         return good_attributes
 
-    def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission):
+    def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission, correct_obj_name):
 
         # ============= Apply n-step and store transitions in temporary episode ====================
         # ==========================================================================================
@@ -156,8 +156,9 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                 self.generator_dataset["states"].append(torch.cat(trajectory_to_predict, dim=0).unsqueeze(0))
                 self.generator_dataset["instructions"].append(mission)
                 self.generator_dataset["lengths"].append(mission.size(0))
-                if len(self.generator_dataset["states"]) % 10 == 0:
-                    pkl.dump(self.generator_dataset, open("generator_dataset7.pkl", "wb"))
+                self.generator_dataset["correct_obj_name"].append(correct_obj_name)
+                # if len(self.generator_dataset["states"]) % 10 == 0:
+                #     pkl.dump(self.generator_dataset, open("saved_tools/generator_dataset7.pkl", "wb"))
 
             self._store_episode(self.current_episode)
             self.current_episode = []

@@ -98,14 +98,14 @@ class AbstractReplay(ABC):
 
     @abstractmethod
     def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length,
-                       hindsight_mission):
+                       hindsight_mission, correct_obj_name):
         pass  # todo : remove mission_length, can be computed on the fly instead of moving it around
 
 class ReplayMemory(AbstractReplay):
     def __init__(self, config):
         super().__init__(config)
 
-    def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission=None):
+    def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission=None, correct_obj_name=None):
         """
         Adds transition to an temporary episode buffer
         When TERMINAL is reach, the episode is added to the replay buffer
