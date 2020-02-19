@@ -13,7 +13,7 @@ class RecurrentDQN(BaseDoubleDQN):
         self.fuse_text_before_memory = True
 
         self.state_padding = torch.zeros(1, *self.env.observation_space["image"].shape)
-        self.action_padding = env.action_space.n + 1
+        self.action_padding = env.action_space.n
         self.terminal_padding = 1
 
     def select_action(self, state, ht):
@@ -52,6 +52,7 @@ class RecurrentDQN(BaseDoubleDQN):
             "padding_mask" :           [],
             "state_sequence_lengths" : [],
             "terminal" :               [],
+            "last_action" :            [],
             "action" :                 [],
             "reward" :                 [],
             "gamma" :                  [],
@@ -83,19 +84,23 @@ class RecurrentDQN(BaseDoubleDQN):
             batch_dict["state_sequence_lengths"].append(seq_length)
             state_sequences_transitions = self.replay_buffer.transition(*zip(*padded_sequences))
 
-            batch_dict["state"].extend(         state_sequences_transitions.current_state)
-            batch_dict["next_state"].extend(    state_sequences_transitions.next_state)
-            batch_dict["terminal"].extend(      state_sequences_transitions.terminal)
-            batch_dict["action"].extend(        state_sequences_transitions.action)
-            batch_dict["mission"].extend(       state_sequences_transitions.mission)
-            batch_dict["mission_length"].extend(state_sequences_transitions.mission_length)
-            batch_dict["reward"].extend(        state_sequences_transitions.reward)
-            batch_dict["gamma"].extend(         state_sequences_transitions.gamma)
-            batch_dict["padding_mask"].extend(                              mask)
+            batch_dict["state"].extend(           state_sequences_transitions.current_state)
+            batch_dict["next_state"].extend(      state_sequences_transitions.next_state)
+            batch_dict["terminal"].extend(        state_sequences_transitions.terminal)
+            batch_dict["action"].extend(          state_sequences_transitions.action)
+            batch_dict["mission"].extend(         state_sequences_transitions.mission)
+            batch_dict["mission_length"].extend(  state_sequences_transitions.mission_length)
+            batch_dict["reward"].extend(          state_sequences_transitions.reward)
+            batch_dict["gamma"].extend(           state_sequences_transitions.gamma)
+            batch_dict["padding_mask"].extend(                                mask)
+
+            batch_dict["last_action"].append(                                 self.action_padding)
+            batch_dict["last_action"].extend(     state_sequences_transitions.action[:-1])
+
 
         assert len(batch_dict["padding_mask"]) == len(batch_dict["mission"])
         assert len(batch_dict["padding_mask"]) == len(batch_dict["state"])
-
+        assert len(batch_dict["padding_mask"]) == len(batch_dict["last_action"])
 
         return batch_dict
 
@@ -136,7 +141,9 @@ class RecurrentDQN(BaseDoubleDQN):
 
         # Convert to torch and remove padding since it's not useful for those variables
         batch_terminal = torch.as_tensor(batch_dict["terminal"], dtype=torch.int32)[batch_mask == 1].to(self.device)
-        batch_action = torch.LongTensor(batch_dict["action"])[batch_mask == 1].view(-1, 1).to(device=self.device)
+        batch_action_full = torch.LongTensor(batch_dict["action"]).to(device=self.device)
+        batch_action = batch_action_full[batch_mask == 1].view(-1, 1)
+        batch_last_action = torch.LongTensor(batch_dict["last_action"]).to(device=self.device)
         batch_gamma = torch.FloatTensor(batch_dict["gamma"])[batch_mask == 1].view(-1, 1).to(device=self.device)
 
         #============= Computing targets ===========
@@ -147,14 +154,13 @@ class RecurrentDQN(BaseDoubleDQN):
             "image": batch_next_state,
             "mission": batch_mission,
             "mission_length": batch_mission_length,
+            "last_action" : batch_action_full, # Can be useful for the lstm
             "padding_mask": batch_mask,
             "state_sequence_lengths": batch_sequence_length,
             "max_sequence_length": batch_dict["max_sequence_length"]
         }
 
         # Double DQN : Selection of the action with the policy net
-
-        # todo : SEND ACTION HERE
         q_values_for_action, _ = self.policy_net(batch_next_state_non_terminal_dict)
         q_values_next_state, _ = self.target_net(batch_next_state_non_terminal_dict)
 
@@ -175,6 +181,7 @@ class RecurrentDQN(BaseDoubleDQN):
             "image": batch_curr_state,
             "mission": batch_mission,
             "mission_length": batch_mission_length,
+            "last_action" : batch_last_action,
             "padding_mask" : batch_mask,
             "state_sequence_lengths" : batch_sequence_length,
             "max_sequence_length" : batch_dict["max_sequence_length"]

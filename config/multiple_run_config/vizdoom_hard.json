@@ -1,38 +1,13 @@
 [
   {
-    "model_config": "conv_vizdoom_recurrent.json",
-    "env_config": "vizdoom_hard.json"
+    "model_config": "conv_vizdoom_recurrent_scaled.json",
+    "env_config": "vizdoom_hard_scaled.json",
+    "model_ext": "her.json"
   },
 
   {
-    "model_config": "conv_vizdoom_recurrent.json",
-    "env_config": "vizdoom_hard.json",
-    "model_ext" : "her.json"
-  },
-
-  {
-    "model_config": "conv_vizdoom_recurrent.json",
-    "env_config": "vizdoom_hard.json",
-    "model_ext" : "less_update1.json"
-  },
-
-    {
-    "model_config": "conv_vizdoom_recurrent.json",
-    "env_config": "vizdoom_hard.json",
-    "model_ext" : "less_update1_her.json"
-  },
-
-  {
-    "model_config": "conv_vizdoom_recurrent.json",
-    "env_config": "vizdoom_hard.json",
-    "model_ext" : "less_update2.json"
-  },
-
-    {
-    "model_config": "conv_vizdoom_recurrent.json",
-    "env_config": "vizdoom_hard.json",
-    "model_ext" : "less_update2_her.json"
+    "model_config": "conv_vizdoom_recurrent_scaled.json",
+    "env_config": "vizdoom_hard_scaled.json"
   }
-
 
 ]

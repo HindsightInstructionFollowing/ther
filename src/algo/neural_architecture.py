@@ -77,7 +77,9 @@ def conv_factory(input_shape, channels, kernels, strides, max_pool):
 class MinigridRecurrentPolicy(nn.Module):
     def __init__(self, obs_space, action_space, config, device):
         super().__init__()
-        self.device = device
+
+        self.n_actions = action_space.n
+        self.device =    device
 
         # ================= VISION ====================
         # =============================================
@@ -129,12 +131,6 @@ class MinigridRecurrentPolicy(nn.Module):
         else:
             self.size_after_text_viz_merge = self.size_after_conv
 
-        # ======== ADD ACTION ======
-        self.use_action_rnn = False
-        if self.use_action_rnn:
-            # Create action embedding to add to the rnn
-            pass
-
         # ============== PROJECT TEXT AND VISION ? ===============
         # ========================================================
         projection_size = config["projection_after_conv"]
@@ -145,10 +141,16 @@ class MinigridRecurrentPolicy(nn.Module):
         else:
             self.projection_after_merge = lambda x:x
 
+        # ======== ADD ACTION ======
+        self.use_action_rnn = config["use_action_rnn"]
+        if self.use_action_rnn:
+            action_embedding_size = config["action_embedding_size"]
+            self.action_embedding = nn.Embedding(self.n_actions + 1, action_embedding_size) # + 1 is for padding action
+            self.size_after_text_viz_merge += action_embedding_size
+
 
         # ================ Q-values, V, Advantages =========
         # ==================================================
-        self.n_actions =           action_space.n
         self.memory_size =         config["rnn_state_hidden_size"]
         self.last_hidden_fc_size = config["last_hidden_fc_size"]
         self.memory_lstm_size =    self.size_after_text_viz_merge
@@ -213,24 +215,24 @@ class MinigridRecurrentPolicy(nn.Module):
             else:
                 flatten_vision_and_text = torch.cat((flatten_vision_and_text, out_text), dim=1)
 
-        # ======== ADD ACTION =====
-        if self.use_action_rnn:
-            pass
-
 
         # ======= PROJECTION ========
         flatten_vision_and_text = self.projection_after_merge(flatten_vision_and_text)
-
         vision_and_text_sequence_format = flatten_vision_and_text.view(n_sequence, max_seq_len, -1)
-        vision_and_text_sequence_format = torch.nn.utils.rnn.pack_padded_sequence(input=vision_and_text_sequence_format,
-                                                                                  lengths=sequences_length,
-                                                                                  batch_first=True,
-                                                                                  enforce_sorted=False)
+
+        # ======== ADD ACTION =====
+        if self.use_action_rnn:
+            action_embedding = self.action_embedding(state["last_action"]).view(n_sequence, max_seq_len, -1)
+            vision_and_text_sequence_format = torch.cat([vision_and_text_sequence_format, action_embedding], dim=2)
 
         # ===== RECURRENT MODULE ======
         if ht is None:
             ht = torch.zeros(1, n_sequence, self.memory_size*2).to(self.device)
 
+        vision_and_text_sequence_format = torch.nn.utils.rnn.pack_padded_sequence(input=vision_and_text_sequence_format,
+                                                                                  lengths=sequences_length,
+                                                                                  batch_first=True,
+                                                                                  enforce_sorted=False)
         hidden_memory = (ht[:, :, :self.memory_size], ht[:, :, self.memory_size:])
         all_ht, hidden_memory = self.memory_rnn(vision_and_text_sequence_format, hidden_memory)
 

@@ -1,5 +1,5 @@
 {
-  "name" : "doom_rdddqn_downscale",
+  "name" : "doom_rdddqn_downscale_action_normin",
   "algo" : "rdqn",
   "device" : "cuda",
 
@@ -18,8 +18,12 @@
       "use_gated_attention" : true,
 
       "ignore_text" : false,
+
       "rnn_state_hidden_size" : 512,
-      "rnn_text_hidden_size" : 64,
+      "use_action_rnn" : true,
+      "action_embedding_size" : 32,
+
+      "rnn_text_hidden_size" : 128,
       "word_embedding_size" : 32,
 
       "fc_text_embedding_hidden" : 0,
@@ -32,36 +36,38 @@
       "use_her" : false,
       "prioritize" : false,
       "use_ther" : false,
-      "use_compression" : false,
+      "use_compression" : true,
 
-      "ther_params" : {
-        "accuracy_convergence" : 0.9,
-        "max_steps_optim" : 10000,
+      "ther_params": {
+          "accuracy_convergence": 0.96,
+          "max_steps_optim" : 2000,
+          "tolerance_convergence": 1e-5,
 
-        "lr" : 3e-4,
-        "batch_size" : 128,
-        "weight_decay" : 1e-3,
-        "update_steps": 150,
-        "n_sample_before_using_generator" : 300,
-        "n_state_to_predict_instruction" : 7,
+          "lr": 3e-4,
+          "batch_size": 128,
+          "weight_decay": 1e-4,
+          "update_steps": [30, 300, 1000],
+          "n_sample_before_using_generator": 300,
 
-        "architecture_params": {
-          "conv_layers_channel" : [25, 50, 75],
-          "conv_layers_size" : [8,4,4],
-          "conv_layers_stride" : [4,2,2],
-          "max_pool_layers" : [0,0,0],
+          "n_state_to_predict_instruction": 7,
 
-          "projection_after_conv" : 1024,
-          "trajectory_encoding_rnn" : 1024,
+          "architecture_params": {
+              "conv_layers_channel" : [32, 64, 64],
+              "conv_layers_size" : [8,4,4],
+              "conv_layers_stride" : [4,2,2],
+              "max_pool_layers": [0, 0, 0],
 
-          "embedding_dim" : 32,
-          "generator_max_len" : 10,
+              "projection_after_conv": 512,
 
-          "dropout" : 0.5,
-          "decoder_hidden" : 256
+              "trajectory_encoding_rnn": 512,
 
+              "embedding_dim": 512,
+              "generator_max_len": 10,
+
+              "dropout": 0.5,
+              "decoder_hidden": 256
+          }
         }
-      }
     },
 
     "n_parallel_env" : 1,
@@ -71,11 +77,12 @@
     "gamma" : 0.99,
     "update_target_every" : 20000,
     "step_exploration" : 40000,
-    "weight_decay" : 0
+    "weight_decay" : 1e-4
   },
 
   "wrappers_model" : [
-    {"name" : "MinigridTorchWrapper", "params" : {"device" : "cuda"}}
+    {"name" : "MinigridTorchWrapper", "params" : {"device" : "cuda"}},
+    {"name" : "NormalizeWrapper", "params" : {"device" : "cuda"}}
   ]
 
 }

@@ -88,7 +88,6 @@ class BaseDoubleDQN(nn.Module):
         self.PADDING_MISSION = 2  # Padding is always 2, checked by vocab
 
     def select_action(self, state, ht=None):
-
         self.current_epsilon = max(self.epsilon_init - self.total_steps * (self.epsilon_init - self.epsilon_min)
                                    / self.step_exploration, self.epsilon_min)
 
@@ -289,16 +288,14 @@ class BaseDoubleDQN(nn.Module):
 
             done = False
             obs = self.env.reset()
-            obs["last_action"] = 0
             iter_this_ep = 0
             reward_this_ep = 0
             begin_ep_time = time.time()
             ht = None
 
             while not done:
-                act, q_values, ht = self.select_action(obs, ht) # Todo change signature
+                act, q_values, ht = self.select_action(obs, ht)
                 new_obs, reward, done, info = self.env.step(act)
-
                 iter_this_ep += 1
                 self.environment_step += 1
                 reward_this_ep += reward

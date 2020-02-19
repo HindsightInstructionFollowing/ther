@@ -26,13 +26,13 @@ config = {
     "use_compression" : False,
 
     "ther_params": {
-        "accuracy_convergence": 0.98,
+        "accuracy_convergence": 0.96,
         "max_steps_optim" : 400,
         "tolerance_convergence": 1e-5,
 
         "lr": 3e-4,
         "batch_size": 128,
-        "weight_decay": 0,
+        "weight_decay": 1e-4,
         "update_steps": [30, 300, 1000],
         "n_sample_before_using_generator": 300,
 

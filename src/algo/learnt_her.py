@@ -105,6 +105,8 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
                 last_states =     self.current_episode[-self.n_state_to_predict_instruction:]
                 trajectory =      [self.compressor.decompress_elem(t.current_state) for t in last_states]
+                if len(trajectory) < self.n_state_to_predict_instruction:
+                    trajectory =      [self.dummy_state] * (self.n_state_to_predict_instruction - len(trajectory)) + trajectory
                 trajectory =      torch.cat(trajectory, dim=0).to(self.device)
 
                 generated_hindsight_mission = self.instruction_generator.generate(trajectory)
@@ -116,12 +118,12 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
 
                 score_bleu = bleu_score.sentence_bleu(references=[hindsight_mission],
-                                                      hypothesis=generated_hindsight_mission,
+                                                      hypothesis=generated_hindsight_mission.numpy(),
                                                       smoothing_function=bleu_score.SmoothingFunction().method2,
                                                       weights=(0.5,0.5))
 
                 bleu1 = bleu_score.sentence_bleu(references=[hindsight_mission],
-                                                 hypothesis=generated_hindsight_mission,
+                                                 hypothesis=generated_hindsight_mission.numpy(),
                                                  smoothing_function=bleu_score.SmoothingFunction().method2,
                                                  weights=[1])
 

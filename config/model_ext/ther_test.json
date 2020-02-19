@@ -13,7 +13,7 @@
         "max_steps_optim" : 100000,
         "accuracy_convergence" : 0.98,
 
-        "n_sample_before_using_generator" : 1000000000
+        "n_sample_before_using_generator" : 10
       }
     }
   }
