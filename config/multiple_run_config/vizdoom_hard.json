@@ -8,6 +8,12 @@
   {
     "model_config": "conv_vizdoom_recurrent_scaled.json",
     "env_config": "vizdoom_hard_scaled.json"
+  },
+
+  {
+    "model_config": "conv_vizdoom_recurrent_scaled.json",
+    "env_config": "vizdoom_hard_scaled.json",
+    "model_ext": "ther.json"
   }
 
 ]

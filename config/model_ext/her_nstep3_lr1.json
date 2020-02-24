@@ -1,5 +1,5 @@
 {
-  "name" : "nstep3_her",
+  "name" : "nstep3_her_lr1e-4",
 
   "algo_params": {
     "experience_replay_config" : {
@@ -7,6 +7,7 @@
       "hindsight_reward" : 1
     },
 
+    "lr" : 1e-4,
     "n_step" : 3
 
   }

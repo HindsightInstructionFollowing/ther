@@ -1,0 +1,12 @@
+{
+  "name" : "b64_lr5e-4_t2000",
+  "algo_params": {
+    "batch_size" : 64,
+    "lr" : 5e-4,
+    "update_target_every" : 2000,
+    "weight_decay" : 1e-4
+  }
+}
+
+
+

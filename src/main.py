@@ -16,7 +16,7 @@ from config import load_config, LoggingPrinter
 from env_utils import create_doom_env, AttrDict
 
 import ray
-@ray.remote(num_gpus=0.33, max_retries=1)
+@ray.remote(num_gpus=0.32, max_retries=1)
 def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_test):
 
     # =================== CONFIGURATION==================
