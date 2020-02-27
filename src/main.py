@@ -4,6 +4,8 @@ from algo.basedoubledqn import BaseDoubleDQN
 from algo.recurrent_dqn import RecurrentDQN
 from algo.ppo import PPOAlgo
 from gym_minigrid.envs.fetch_attr import FetchAttrEnv, FetchAttrDictLoaded
+from gym_minigrid.envs.fetch_sequential import FetchAttrSequentialEnv
+
 from gym_minigrid.wrappers import wrap_env_from_list
 
 from gym_minigrid.envs.relationnal import RelationnalFetch
@@ -76,6 +78,28 @@ def start_experiment(model_config, env_config, exp_dir, seed, model_ext, local_t
                                                      seed=full_config["seed"]
                                                      )
 
+    elif full_config["env_type"] == "sequential" :
+        env_params = full_config["env_params"]
+        env_creator = lambda: FetchAttrSequentialEnv(size=env_params["size"],
+                                                     max_steps=env_params["max_steps"],
+                                                     numObjs=env_params["numObjs"],
+                                                     missions_file_str=env_params["missions_file_str"],
+                                                     single_mission=env_params["single_mission"],
+                                                     n_objective=env_params["n_objective"],
+                                                     ordered_pickup=env_params["ordered_pickup"],
+                                                     seed=full_config["seed"])
+
+        if "env_test" in full_config:
+            test_env_creator = lambda: FetchAttrSequentialEnv(size=env_params["size"],
+                                                              numObjs=env_params["numObjs"],
+                                                              max_steps=env_params["max_steps"],
+                                                              missions_file_str=full_config["env_test"]["missions_file_str"],
+                                                              n_step_between_test=full_config["env_test"]["n_step_between_test"],
+                                                              n_step_test=full_config["env_test"]["n_step_test"],
+                                                              n_objective=env_params["n_objective"],
+                                                              ordered_pickup=env_params["ordered_pickup"],
+                                                              seed=full_config["seed"]
+                                                              )
 
     elif full_config["env_type"] == "vizdoom":
         args = AttrDict(full_config["env_params"])

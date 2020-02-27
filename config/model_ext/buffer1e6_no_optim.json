@@ -1,0 +1,10 @@
+{
+  "name": "buffer1e6_her_no_optim",
+  "algo_params": {
+    "experience_replay_config": {
+      "use_her" : true,
+      "size": 1e6
+      },
+    "batch_size" : 1e10
+    }
+}

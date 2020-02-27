@@ -23,10 +23,10 @@
   },
 
   "wrappers_env" : [
-      {
-        "name" : "Word2IndexWrapper",
-        "params" : {"vocab_file_str" : "gym-minigrid/gym_minigrid/envs/missions/vocab_fetch.json"}
-      }
+      {"name" : "RemoveUselessChannelWrapper", "params" : {}},
+      {"name" : "RemoveUselessActionWrapper", "params" : {}},
+      {"name" : "Word2IndexWrapper", "params" : {"vocab_file_str" : "gym-minigrid/gym_minigrid/envs/missions/vocab_sequential.json"}},
+      {"name" : "lastactionwrapper", "params" : {}}
   ]
 }
 

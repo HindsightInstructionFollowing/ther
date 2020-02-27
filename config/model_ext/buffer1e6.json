@@ -1,0 +1,8 @@
+{
+  "name": "buffer1e6",
+  "algo_params": {
+    "experience_replay_config": {
+      "size": 1e6
+      }
+    }
+}

@@ -1,5 +1,5 @@
 {
-  "name" : "doom_rdddqn_downscale_action",
+  "name" : "doom_rdddqn_downscale_action_buffer4e5",
   "algo" : "rdqn",
   "device" : "cuda",
 
@@ -32,7 +32,7 @@
 
     "experience_replay_config" : {
       "hindsight_reward" : 1,
-      "size" : 100000,
+      "size" : 400000,
       "use_her" : false,
       "prioritize" : false,
       "use_ther" : false,
@@ -72,6 +72,7 @@
 
     "n_parallel_env" : 1,
     "batch_size" : 128,
+    "n_optimize_per_step" : 1,
     "lr" : 1e-5,
     "n_step" : 1,
     "gamma" : 0.99,

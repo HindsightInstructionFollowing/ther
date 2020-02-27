@@ -36,6 +36,9 @@ class BaseDoubleDQN(nn.Module):
                                              lr=config["lr"],
                                              weight_decay=config["weight_decay"])
 
+        self.n_optimize_per_step = config["n_optimize_per_step"]
+        self.n_update_policy_net = 0
+
         self.batch_size = config["batch_size"]
         self.n_actions = env.action_space.n
 
@@ -199,8 +202,9 @@ class BaseDoubleDQN(nn.Module):
 
         # Do the gradient descent step
         self.optimizer.step()
+        self.n_update_policy_net += 1
 
-        if self.environment_step % self.update_target_every == 0:
+        if self.n_update_policy_net % self.update_target_every == 0:
             self.target_net.load_state_dict(self.policy_net.state_dict())
             self.n_update_target += 1
 
@@ -300,16 +304,18 @@ class BaseDoubleDQN(nn.Module):
                 self.environment_step += 1
                 reward_this_ep += reward
 
-                loss = self.optimize_model(state=obs,
-                                           action=act,
-                                           next_state=new_obs,
-                                           reward=reward,
-                                           done=done
-                                           )
+                for up in range(self.n_optimize_per_step):
+                    loss = self.optimize_model(state=obs,
+                                               action=act,
+                                               next_state=new_obs,
+                                               reward=reward,
+                                               done=done
+                                               )
+                    self.tf_logger.log("train/loss", loss)
+
 
                 obs = new_obs
 
-                self.tf_logger.log("train/loss", loss)
                 self.tf_logger.log("train/max_q_val", max(q_values), operation='max')
                 self.tf_logger.log("train/min_q_val", min(q_values), operation='min')
 

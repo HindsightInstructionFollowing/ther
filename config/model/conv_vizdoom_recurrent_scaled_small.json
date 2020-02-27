@@ -1,5 +1,5 @@
 {
-  "name" : "doom_rdddqn_downscale_action_small_her",
+  "name" : "doom_rdddqn_downscale_action_buffer4e5_smaller_archi",
   "algo" : "rdqn",
   "device" : "cuda",
 
@@ -31,8 +31,8 @@
 
     "experience_replay_config" : {
       "hindsight_reward" : 1,
-      "size" : 100000,
-      "use_her" : true,
+      "size" : 400000,
+      "use_her" : false,
       "prioritize" : false,
       "use_ther" : false,
       "use_compression" : true,
@@ -45,7 +45,7 @@
           "lr": 3e-4,
           "batch_size": 128,
           "weight_decay": 1e-4,
-          "update_steps": [30, 300, 1000],
+          "update_steps": 150,
           "n_sample_before_using_generator": 300,
 
           "n_state_to_predict_instruction": 7,
@@ -71,6 +71,7 @@
 
     "n_parallel_env" : 1,
     "batch_size" : 128,
+    "n_optimize_per_step" : 1,
     "lr" : 1e-5,
     "n_step" : 1,
     "gamma" : 0.99,
