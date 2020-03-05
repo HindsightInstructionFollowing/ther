@@ -20,7 +20,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
         # Convention and usage variable
         self.padding_value =                   2 # By convention, checked by Word2Idx in wrappers.py
-        self.n_state_to_predict_instruction =               config["n_state_to_predict_instruction"]
+        self.n_state_to_predict_instruction =  config["n_state_to_predict_instruction"]
 
         # Model mapping state(s) to an instruction
         self.dummy_state = torch.zeros(input_shape).unsqueeze(0)
@@ -268,16 +268,23 @@ class LearntHindsightRecurrentExperienceReplay(LearntHindsightExperienceReplay):
     def __init__(self, input_shape, n_output, config, device, logger=None):
         self.len_sum = 0
         super().__init__(input_shape=input_shape, n_output=n_output, config=config, device=device, logger=logger)
+        self.MIN_SEQ_SIZE = 4
+        del self.id_range  # Not useful in Recurrent Replay
 
-        self.episode_length = np.zeros(self.memory_size)
-        self.transition_proba = np.zeros(self.memory_size)
+        self.prioritize_max_mean_balance = config["prioritize_max_mean_balance"]
+
+        # Reduce memory footprint by reducing the number of memory cell available
+        self.episode_length = np.zeros(self.memory_size // self.MIN_SEQ_SIZE)
+
+        if self.use_prioritization:
+            self.prioritize_p = np.zeros(self.memory_size // self.MIN_SEQ_SIZE)
+
         self.last_position = 0
 
     def _store_episode(self, episode_to_store):
         RecurrentReplayBuffer._store_episode(self, episode_to_store)
     def sample(self, batch_size):
         return RecurrentReplayBuffer.sample(self, batch_size)
-
     def __len__(self):
         return int(self.len_sum)
 

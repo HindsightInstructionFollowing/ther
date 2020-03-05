@@ -12,7 +12,7 @@ from algo.neural_architecture import basic_transition
 class AbstractReplay(ABC):
     def __init__(self, config):
         """
-        All replay buffers are based on the same strategy, making hindsight and Prioritized Replay MUCH EASIER
+        All replay buffers are based on the same strategy, making Recurrent, Hindsight and Prioritized much easier
 
         Sample are added to a temporary episode buffer
         When DONE is reach, the episode is added to the replay replay alongside a new one if HER is used
@@ -31,14 +31,15 @@ class AbstractReplay(ABC):
         self.position = 0
 
         # Prioritized parameters
-        self.use_prioritization =       config["prioritize"]
-        self.prioritize_alpha = config["prioritize_alpha"]
-        self.prioritize_beta =  config["prioritize_beta"]
-        self.prioritize_eps   = config["prioritize_eps"]
-        self.prioritize_p =     np.zeros(self.memory_size)
-        self.id_range =         np.arange(self.memory_size)
-        self.max_proba = 1
-        self.prioritize_p[0] = 1
+        self.use_prioritization =   config["prioritize"]
+        if self.use_prioritization:
+            self.prioritize_alpha = config["prioritize_alpha"]
+            self.prioritize_beta =  config["prioritize_beta"]
+            self.prioritize_eps   = config["prioritize_eps"]
+            self.prioritize_p =     np.zeros(self.memory_size)
+            self.id_range =         np.arange(self.memory_size)
+            self.max_proba = 1
+            self.prioritize_p[0] = 1
 
         # N-step, gamma
         self.last_terminal = []  # Logging done or terminal (end of episode)
@@ -60,18 +61,14 @@ class AbstractReplay(ABC):
     def sample(self, batch_size):
 
         if self.use_prioritization:
-            prioritize_proba = self.prioritize_p / self.prioritize_p.sum()
-            min_proba = np.min(prioritize_proba[:len(self)])
+            prioritize_proba = self.prioritize_p[:self.n_memory_cell] / self.prioritize_p[:self.n_memory_cell].sum()
 
             self.last_id_sampled = np.random.choice(self.id_range,
                                                     size=batch_size,
                                                     replace=True,
                                                     p=prioritize_proba)
 
-            max_w = (len(self) * min_proba) ** - self.prioritize_beta
-
-            is_weights = np.power(prioritize_proba[self.last_id_sampled] * len(self), - self.prioritize_beta)
-            is_weights /= max_w
+            is_weights = self.compute_is_weights(prioritize_proba)
 
         else:
             self.last_id_sampled = np.random.randint(0, self.n_memory_cell, batch_size)
@@ -129,6 +126,15 @@ class AbstractReplay(ABC):
         delta = errors + self.prioritize_eps
         self.prioritize_p[self.last_id_sampled] = np.power(delta, self.prioritize_alpha)
 
+    def compute_is_weights(self, prioritize_proba):
+        min_proba = np.min(prioritize_proba[:len(self)])
+        max_w = (len(self) * min_proba) ** - self.prioritize_beta
+
+        is_weights = np.power(prioritize_proba[self.last_id_sampled] * len(self), - self.prioritize_beta)
+        is_weights /= max_w
+
+        return is_weights
+
     def __len__(self):
         return self.n_memory_cell
 
@@ -137,7 +143,7 @@ class AbstractReplay(ABC):
                        hindsight_mission, correct_obj_name):
         pass  # todo : remove mission_length, can be computed on the fly instead of moving it around
 
-class ReplayMemory(AbstractReplay):
+class ReplayBuffer(AbstractReplay):
     def __init__(self, config):
         super().__init__(config)
 
@@ -216,14 +222,23 @@ class ReplayMemory(AbstractReplay):
             self._store_episode(self.current_episode)
             self.current_episode = []
 
-class RecurrentReplayBuffer(ReplayMemory):
+class RecurrentReplayBuffer(ReplayBuffer):
     def __init__(self, config):
 
         self.len_sum = 0
+        self.MIN_SEQ_SIZE = 1
         super().__init__(config=config)
+        del self.id_range # Not useful in Recurrent Replay
 
-        self.episode_length = np.zeros(self.memory_size)
-        self.transition_proba = np.zeros(self.memory_size)
+        self.prioritize_max_mean_balance = config["prioritize_max_mean_balance"]
+
+        # Reduce memory footprint by reducing the number of memory cell available
+        self.episode_length = np.zeros(self.memory_size // self.MIN_SEQ_SIZE)
+
+        if self.use_prioritization:
+            self.prioritize_p = np.zeros(self.memory_size // self.MIN_SEQ_SIZE)
+            self.prioritize_p[0] = 1
+
         self.last_position = 0
 
     def _store_episode(self, episode_to_store):
@@ -232,10 +247,17 @@ class RecurrentReplayBuffer(ReplayMemory):
         This allows to retrieve entire episode, it's smoother to read and pad/batch
 
         In a flat representation, all samples are uniformely sampled
-        Since the buffer sample episodes by episodes, we will replay samples in small episodes more frequently
+        Since the buffer samples episodes by episodes, we will replay samples in small episodes more frequently
 
         It could be cool, be we don't want to bias the sampling towards smaller sequences
         Hence, the transition_proba compensate for this bias
+
+        If prioritization is used, the length doesn't matter
+        The strategy employed in R2D2 : https://openreview.net/pdf?id=r1lyTjAqYX
+
+        The p of a sequence of i element is : η * max δi + (1−η) * mean(δ)
+        η is self.prioritize_max_mean_balance, balancing between max and mean of the TD error (δ)
+
         """
         len_episode = len(episode_to_store)
 
@@ -248,30 +270,56 @@ class RecurrentReplayBuffer(ReplayMemory):
         self.memory[self.position] = episode_to_store
         self.episode_length[self.position] = len_episode
 
+        if self.use_prioritization:
+            self.prioritize_p[self.position] = self.prioritize_p.max()
+
         # Push selector and update buffer length if necessary
         self.position += 1
         self.n_memory_cell = max(self.n_memory_cell, self.position)
 
-        # Update transition proba
-        self.transition_proba[:self.n_memory_cell] = self.episode_length[:self.n_memory_cell] / self.episode_length[:self.n_memory_cell].sum()
         self.len_sum = self.episode_length.sum()
 
     def sample(self, batch_size):
-
         size = 0
         batch_seq = []
 
-        id_taken = set()
+        id_taken = list()
+
+        if self.use_prioritization:
+            transition_proba = self.prioritize_p[:self.n_memory_cell] / self.prioritize_p[:self.n_memory_cell].sum()
+        else:
+            transition_proba = self.episode_length[:self.n_memory_cell] / self.episode_length[:self.n_memory_cell].sum()
 
         while size < batch_size:
-            id_episode = np.random.choice(range(self.n_memory_cell), p=self.transition_proba[:self.n_memory_cell])
-            if id_episode in id_taken : continue
+            id_episode = np.random.choice(range(self.n_memory_cell), p=transition_proba)
             seq = [self.compressor.decompress_transition(transition) for transition in self.memory[id_episode]]
             size += len(seq)
             batch_seq.append(seq)
-            id_taken.add(id_episode)
+            id_taken.append(id_episode)
 
-        return batch_seq
+        self.last_id_sampled = np.array(id_taken)
+
+        # Compute is_weights
+        if self.use_prioritization:
+            is_weights = self.compute_is_weights(transition_proba)
+        else:
+            is_weights = np.ones_like(self.last_id_sampled)
+
+        return batch_seq, is_weights
+
+    def update_transitions_proba(self, errors):
+
+        td_err = []
+        last_l = 0
+        errors = np.power(errors, self.prioritize_alpha)
+        for l in self.episode_length[self.last_id_sampled]:
+            l = int(l)
+            err_list = errors[last_l:last_l+l]
+            err = self.prioritize_max_mean_balance * np.max(err_list) + (1 - self.prioritize_max_mean_balance) * np.mean(err_list)
+            td_err.append(err)
+            last_l += l
+
+        self.prioritize_p[self.last_id_sampled] = td_err
 
     def __len__(self):
         return int(self.len_sum)

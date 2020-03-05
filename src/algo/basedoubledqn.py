@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from algo.neural_architecture import MinigridConvPolicy, MlpNet, MinigridRecurrentPolicy
-from algo.replay_buffer import ReplayMemory, RecurrentReplayBuffer
+from algo.replay_buffer import ReplayBuffer, RecurrentReplayBuffer
 from algo.learnt_her import LearntHindsightExperienceReplay, LearntHindsightRecurrentExperienceReplay
 
 import time
@@ -71,7 +71,7 @@ class BaseDoubleDQN(nn.Module):
             if config["architecture"] == "conv_lstm":
                 replay_buffer = RecurrentReplayBuffer(config=config["experience_replay_config"])
             else:
-                replay_buffer = ReplayMemory(config=config["experience_replay_config"])
+                replay_buffer = ReplayBuffer(config=config["experience_replay_config"])
 
         self.replay_buffer = replay_buffer
 
