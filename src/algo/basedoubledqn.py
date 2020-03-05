@@ -129,12 +129,13 @@ class BaseDoubleDQN(nn.Module):
             return 0
 
         # Sample from the memory replay
-        transitions = self.replay_buffer.sample(self.batch_size)
+        transitions, is_weights = self.replay_buffer.sample(self.batch_size)
 
         # Sort transitions by missions length (for packing and padding)
-        transitions = sorted(transitions,
-                             key=lambda x: -x.mission.size(0))
-
+        zipped = zip(transitions, is_weights)
+        transitions, is_weights = zip(*sorted(zipped,
+                                             key=lambda x: -x[0].mission.size(0))
+                                      )
         # Batch the transitions into one namedtuple
         batch_transitions = self.replay_buffer.transition(*zip(*transitions))
 
@@ -186,7 +187,8 @@ class BaseDoubleDQN(nn.Module):
         predictions = predictions.gather(1, batch_action).view(-1)
 
         # Loss
-        loss = F.smooth_l1_loss(predictions, targets)
+        loss = F.smooth_l1_loss(predictions, targets, reduction='none') * is_weights
+        loss = loss.mean()
         # Optimization
         self.optimizer.zero_grad()
         loss.backward()

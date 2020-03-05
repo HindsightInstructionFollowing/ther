@@ -25,17 +25,29 @@ class AbstractReplay(ABC):
 
         self.memory_size = int(config["size"])
         self.memory = [None for _ in range(self.memory_size)]
-        self.n_episodes = 0
+
+        #  1 memory cell = 1 transition for normal buffer OR 1 episode for Recurrent Buffer
+        self.n_memory_cell = 0
         self.position = 0
 
-        self.n_step = config["n_step"]
+        # Prioritized parameters
+        self.use_prioritization =       config["prioritize"]
+        self.prioritize_alpha = config["prioritize_alpha"]
+        self.prioritize_beta =  config["prioritize_beta"]
+        self.prioritize_eps   = config["prioritize_eps"]
+        self.prioritize_p =     np.zeros(self.memory_size)
+        self.id_range =         np.arange(self.memory_size)
+        self.max_proba = 1
+        self.prioritize_p[0] = 1
 
-        self.last_terminal = [] # Logging done or terminal (end of episode)
-        self.last_returns = [] # Logging rewards (return)
-        self.last_states = [] # Logging next states
-        self.last_transitions = [] # Logging rest of the transitions (current_state, action etc ...)
+        # N-step, gamma
+        self.last_terminal = []  # Logging done or terminal (end of episode)
+        self.last_returns = []  # Logging rewards (return)
+        self.last_states = []  # Logging next states
+        self.last_transitions = []  # Logging rest of the transitions (current_state, action etc ...)
+        self.n_step =      config["n_step"]
 
-        self.gamma = config["gamma"]
+        self.gamma =       config["gamma"]
         self.gamma_array = np.array([self.gamma**i for i in range(self.n_step+1)])
 
         # Storing in replay buffer might be expensive, compressing states (images) can be an option
@@ -46,8 +58,27 @@ class AbstractReplay(ABC):
             self.compressor = DummyCompressor()
 
     def sample(self, batch_size):
-        return [self.compressor.decompress_transition(transition)
-                for transition in random.sample(self.memory[:self.n_episodes], batch_size)]
+
+        if self.use_prioritization:
+            prioritize_proba = self.prioritize_p / self.prioritize_p.sum()
+            min_proba = np.min(prioritize_proba[:len(self)])
+
+            self.last_id_sampled = np.random.choice(self.id_range,
+                                                    size=batch_size,
+                                                    replace=True,
+                                                    p=prioritize_proba)
+
+            max_w = (len(self) * min_proba) ** - self.prioritize_beta
+
+            is_weights = np.power(prioritize_proba[self.last_id_sampled] * len(self), - self.prioritize_beta)
+            is_weights /= max_w
+
+        else:
+            self.last_id_sampled = np.random.randint(0, self.n_memory_cell, batch_size)
+            is_weights = np.ones(batch_size)
+
+        return [self.compressor.decompress_transition(self.memory[id_sample])
+                for id_sample in self.last_id_sampled], is_weights
 
     def _store_episode(self, episode_to_store):
         len_episode = len(episode_to_store)
@@ -57,10 +88,13 @@ class AbstractReplay(ABC):
             assert len_episode < self.memory_size,\
                 "Problem, buffer not large enough, memory_size {}, len_episode {}".format(self.memory_size, len_episode)
         # If new episode makes the buffer a bit longer, new length is defined
-        elif self.position + len_episode >= self.n_episodes:
-            self.n_episodes = self.position + len_episode
+        elif self.position + len_episode >= self.n_memory_cell:
+            self.n_memory_cell = self.position + len_episode
 
         self.memory[self.position:self.position + len_episode] = episode_to_store
+        max_prio = self.prioritize_p.max()
+        self.prioritize_p[self.position:self.position + len_episode] = max_prio
+
         self.position += len_episode
 
     def add_n_step_transition(self, n_step):
@@ -72,7 +106,7 @@ class AbstractReplay(ABC):
 
         sum_return = np.sum(self.last_returns[:n_step] * self.gamma_array[:n_step])
         n_step_state = self.last_states[n_step - 1]
-        last_terminal = self.last_terminal[n_step -1]
+        last_terminal = self.last_terminal[n_step - 1]
 
         if not last_terminal:
             assert sum_return == 0
@@ -91,10 +125,12 @@ class AbstractReplay(ABC):
         self.last_states.pop(0)
         self.last_transitions.pop(0)
 
-    def update_transitions_proba(self):
-        pass
+    def update_transitions_proba(self, errors):
+        delta = errors + self.prioritize_eps
+        self.prioritize_p[self.last_id_sampled] = np.power(delta, self.prioritize_alpha)
+
     def __len__(self):
-        return self.n_episodes
+        return self.n_memory_cell
 
     @abstractmethod
     def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length,
@@ -214,10 +250,10 @@ class RecurrentReplayBuffer(ReplayMemory):
 
         # Push selector and update buffer length if necessary
         self.position += 1
-        self.n_episodes = max(self.n_episodes, self.position)
+        self.n_memory_cell = max(self.n_memory_cell, self.position)
 
         # Update transition proba
-        self.transition_proba[:self.n_episodes] = self.episode_length[:self.n_episodes] / self.episode_length[:self.n_episodes].sum()
+        self.transition_proba[:self.n_memory_cell] = self.episode_length[:self.n_memory_cell] / self.episode_length[:self.n_memory_cell].sum()
         self.len_sum = self.episode_length.sum()
 
     def sample(self, batch_size):
@@ -228,7 +264,7 @@ class RecurrentReplayBuffer(ReplayMemory):
         id_taken = set()
 
         while size < batch_size:
-            id_episode = np.random.choice(range(self.n_episodes), p=self.transition_proba[:self.n_episodes])
+            id_episode = np.random.choice(range(self.n_memory_cell), p=self.transition_proba[:self.n_memory_cell])
             if id_episode in id_taken : continue
             seq = [self.compressor.decompress_transition(transition) for transition in self.memory[id_episode]]
             size += len(seq)
@@ -247,7 +283,13 @@ if __name__ == "__main__":
               "use_her": True,
               "n_step": 4,
               "gamma" : 0.99,
-              "use_compression" : False}
+              "use_compression" : False,
+
+              "prioritize": True,
+              "prioritize_alpha" : 0.9,
+              "prioritize_beta": 0.6,
+              "prioritize_eps" : 1e-6,
+              }
 
     # %%
 

@@ -65,6 +65,7 @@
     },
 
     "n_parallel_env" : 1,
+    "n_optimize_per_step" : 1,
     "batch_size" : 128,
     "lr" : 1e-5,
     "gamma" : 0.99,
