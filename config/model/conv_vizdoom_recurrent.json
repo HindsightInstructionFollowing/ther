@@ -1,5 +1,5 @@
 {
-  "name" : "doom_rdddqn_downscale_action_buffer4e5",
+  "name" : "doom_rdddqn_downscale_action_buffer4e5_smaller_archi",
   "algo" : "rdqn",
   "device" : "cuda",
 
@@ -7,27 +7,26 @@
 
   "algo_params": {
     "architecture" : "conv_lstm",
-
     "architecture_params" : {
       "conv_layers_channel" : [32, 64, 64],
       "conv_layers_size" : [8,4,4],
       "conv_layers_stride" : [4,2,2],
       "max_pool_layers" : [0,0,0],
-      "projection_after_conv" : 512,
+      "projection_after_conv" : 256,
 
       "use_gated_attention" : true,
 
       "ignore_text" : false,
 
-      "rnn_state_hidden_size" : 512,
+      "rnn_state_hidden_size" : 256,
       "use_action_rnn" : true,
-      "action_embedding_size" : 32,
+      "action_embedding_size" : 16,
 
-      "rnn_text_hidden_size" : 128,
+      "rnn_text_hidden_size" : 256,
       "word_embedding_size" : 32,
 
       "fc_text_embedding_hidden" : 0,
-      "last_hidden_fc_size" : 512
+      "last_hidden_fc_size" : 256
     },
 
     "experience_replay_config" : {
@@ -40,6 +39,8 @@
       "prioritize" : false,
       "prioritize_alpha" : 0.9,
       "prioritize_beta" : 0.6,
+      "prioritize_eps" : 1e-6,
+      "prioritize_max_mean_balance" : 0.9,
 
       "ther_params": {
           "accuracy_convergence": 0.96,

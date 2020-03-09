@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_fetch_dddqn_stacking",
+  "name" : "minigrid_fetch_dddqn_stacking_buffer5e4_prioritize",
   "algo" : "dqn",
   "device" : "cuda",
 
@@ -13,7 +13,6 @@
       "conv_layers_size" : [2,2,2],
       "conv_layers_stride" : [1,1,1],
       "max_pool_layers" : [2,0,0],
-
 
       "ignore_text" : false,
       "use_gated_attention" : false,
@@ -32,11 +31,16 @@
 
     "experience_replay_config" : {
       "hindsight_reward" : 1,
-      "size" : 100000,
+      "size" : 300000,
       "use_her" : false,
-      "prioritize" : false,
       "use_ther" : false,
-      "use_compression" : false,
+      "use_compression" : true,
+
+      "prioritize" : true,
+      "prioritize_alpha" : 0.9,
+      "prioritize_beta" : 0.6,
+      "prioritize_eps" : 1e-6,
+      "prioritize_max_mean_balance" : 0.9,
 
       "ther_params" : {
         "accuracy_convergence" : 0.9,
@@ -46,7 +50,9 @@
         "batch_size" : 128,
         "weight_decay" : 1e-3,
         "update_steps": 150,
+
         "n_sample_before_using_generator" : 300,
+        "n_state_to_predict_instruction": 7,
 
         "architecture_params": {
           "conv_layers_channel" : [20,36,70],

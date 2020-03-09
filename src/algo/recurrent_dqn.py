@@ -122,7 +122,7 @@ class RecurrentDQN(BaseDoubleDQN):
             return 0
 
         # Sample from the memory replay
-        transitions = self.replay_buffer.sample(self.batch_size)
+        transitions, is_weights = self.replay_buffer.sample(self.batch_size)
 
         batch_dict = self.preprocess_state_sequences(transitions)
 
@@ -145,6 +145,7 @@ class RecurrentDQN(BaseDoubleDQN):
         batch_action = batch_action_full[batch_mask == 1].view(-1, 1)
         batch_last_action = torch.LongTensor(batch_dict["last_action"]).to(device=self.device)
         batch_gamma = torch.FloatTensor(batch_dict["gamma"])[batch_mask == 1].view(-1, 1).to(device=self.device)
+        is_weights = torch.FloatTensor(is_weights).to(device=self.device)
 
         #============= Computing targets ===========
         #===========================================
@@ -191,8 +192,13 @@ class RecurrentDQN(BaseDoubleDQN):
 
         assert predictions.size(0) == batch_sequence_length.sum()
 
+        # Update prio
+        delta = torch.abs(predictions - targets).detach().cpu().numpy()
+        self.replay_buffer.update_transitions_proba(delta)
+
         # Loss
-        loss = F.smooth_l1_loss(predictions, targets)
+        loss = F.smooth_l1_loss(predictions, targets, reduction='none') * is_weights
+        loss = loss.mean()
         # Optimization
         self.optimizer.zero_grad()
         loss.backward()
@@ -220,6 +226,7 @@ class RecurrentDQN(BaseDoubleDQN):
 
         # Log important info, see logging_helper => SweetLogger for more details
         if self.writer:
+            self.writer.store_buffer_id(self.replay_buffer.last_id_sampled)
             self.writer.log("train/percent_terminal", batch_terminal.sum().item() / self.batch_size)
             self.writer.log("train/n_update_target", self.n_update_target)
 

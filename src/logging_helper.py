@@ -41,6 +41,8 @@ class SweetLogger(SummaryWriter):
         # Each contains a list of values, and operation(s?) you want to apply
         self.variable_to_log = dict()
         self.sentence_to_log = dict()
+        self.buffer_id_to_log = dict()
+
         self.dump_step = dump_step
         self.str2op = {'mean': np.mean, 'max': np.max, 'min': np.min}
 
@@ -66,6 +68,11 @@ class SweetLogger(SummaryWriter):
             sentences_path = path.join(self.path_to_log, file_name)
             json.dump(self.sentence_to_log, fp=open(sentences_path, 'w'), indent='    ', separators=('',':'))
 
+            # Dump buffer id
+            id_file_name = "id_count_step_{:08}_{}.json".format(self.next_dump_step, 'train' if train else 'test')
+            id_log_path = path.join(self.path_to_log, id_file_name)
+            json.dump(self.buffer_id_to_log, fp=open(id_log_path, 'w'), indent='    ', separators=('', ':'))
+
             # Dump variables
             for variable_name, var_dict in self.variable_to_log.items():
                 for op in var_dict['operation']:
@@ -81,7 +88,7 @@ class SweetLogger(SummaryWriter):
         return False
 
     def reset(self):
-        # Reset instructions
+        # Reset instructions and buffer ids
         self.sentence_to_log = dict()
 
         # Reset variables
@@ -90,6 +97,14 @@ class SweetLogger(SummaryWriter):
 
     def add_image(self, tag, img_tensor, global_step=None, walltime=None, dataformats='CHW'):
         super().add_image(tag, img_tensor, global_step, walltime, dataformats)
+
+    def store_buffer_id(self, ids):
+        for id in ids:
+            if id in self.buffer_id_to_log:
+                self.buffer_id_to_log[str(id)] += 1
+            else:
+                self.buffer_id_to_log[str(id)] = 1
+
 
     def store_sentences(self, sentence, reward):
 

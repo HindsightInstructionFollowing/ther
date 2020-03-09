@@ -146,6 +146,7 @@ class BaseDoubleDQN(nn.Module):
         batch_action = torch.as_tensor(batch_transitions.action, dtype=torch.long, device=self.device).reshape(-1, 1)
         batch_mission_length = torch.cat(batch_transitions.mission_length).to(self.device)
         batch_gamma = torch.FloatTensor(batch_transitions.gamma).to(self.device) # For n-step gamma might vary a bit
+        is_weights = torch.FloatTensor(is_weights).to(device=self.device)
 
         batch_mission = nn.utils.rnn.pad_sequence(sequences=batch_transitions.mission,
                                                   batch_first=True,
@@ -186,6 +187,10 @@ class BaseDoubleDQN(nn.Module):
         predictions, _, _ = self.policy_net(batch_curr_state_dict)
         predictions = predictions.gather(1, batch_action).view(-1)
 
+        # Update prio
+        delta = torch.abs(predictions - targets).detach().cpu().numpy()
+        self.replay_buffer.update_transitions_proba(delta)
+
         # Loss
         loss = F.smooth_l1_loss(predictions, targets, reduction='none') * is_weights
         loss = loss.mean()
@@ -217,6 +222,7 @@ class BaseDoubleDQN(nn.Module):
 
         # Log important info, see logging_helper => SweetLogger for more details
         if self.writer:
+            self.writer.store_buffer_id(self.replay_buffer.last_id_sampled)
             self.writer.log("train/percent_terminal", batch_terminal.sum().item()/self.batch_size)
             self.writer.log("train/n_update_target", self.n_update_target)
 
@@ -288,8 +294,6 @@ class BaseDoubleDQN(nn.Module):
         episode_num = 1
 
         next_test = self.test_env.n_step_between_test if self.test_env is not None else 0
-
-
         while self.environment_step < n_env_iter:
 
             done = False

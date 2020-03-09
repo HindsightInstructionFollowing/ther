@@ -1,0 +1,14 @@
+{
+  "name": "buffer1e6_prio",
+  "algo_params": {
+    "experience_replay_config": {
+      "prioritize" : true,
+      "prioritize_alpha" : 0.9,
+      "prioritize_beta" : 0.6,
+      "prioritize_eps" : 1e-6,
+      "prioritize_max_mean_balance" : 0.9,
+
+      "size": 1e6
+      }
+    }
+}

@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_fetch_action_rdddqn_bigger",
+  "name" : "minigrid_recurrent_buffer4e5",
   "algo" : "rdqn",
   "device" : "cuda",
 
@@ -32,11 +32,16 @@
 
     "experience_replay_config" : {
       "hindsight_reward" : 1,
-      "size" : 100000,
+      "size" : 400000,
       "use_her" : false,
-      "prioritize" : false,
       "use_ther" : false,
-      "use_compression" : false,
+      "use_compression" : true,
+
+      "prioritize" : false,
+      "prioritize_alpha" : 0.9,
+      "prioritize_beta" : 0.6,
+      "prioritize_eps" : 1e-6,
+      "prioritize_max_mean_balance" : 0.9,
 
       "ther_params" : {
         "max_steps_optim" : 100000,
@@ -49,16 +54,25 @@
         "update_steps": 100,
 
         "n_sample_before_using_generator" : 300,
+        "n_state_to_predict_instruction": 7,
+
 
         "architecture_params": {
           "conv_layers_channel" : [16,32,64],
           "conv_layers_size" : [2,2,2],
           "conv_layers_stride" : [1,1,1],
           "max_pool_layers" : [2,0,0],
-          "embedding_dim" : 32,
-          "generator_max_len" : 10,
-          "dropout" : 0.2,
-          "decoder_hidden" : 128
+
+          "projection_after_conv": 512,
+          "trajectory_encoding_rnn": 512,
+
+          "embedding_dim": 512,
+          "generator_max_len": 10,
+
+          "dropout": 0.5,
+          "decoder_hidden": 256
+
+
         }
       }
     },

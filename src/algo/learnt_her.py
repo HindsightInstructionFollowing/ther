@@ -263,28 +263,22 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             self.logger.add_scalar("gen/generator_loss", loss.detach().item(), self.n_update_generator)
             self.logger.add_scalar("gen/generator_accuracy", accuracy, self.n_update_generator)
 
-class LearntHindsightRecurrentExperienceReplay(LearntHindsightExperienceReplay):
+class LearntHindsightRecurrentExperienceReplay(RecurrentReplayBuffer, LearntHindsightExperienceReplay):
 
     def __init__(self, input_shape, n_output, config, device, logger=None):
         self.len_sum = 0
-        super().__init__(input_shape=input_shape, n_output=n_output, config=config, device=device, logger=logger)
+        LearntHindsightExperienceReplay.__init__(self, input_shape=input_shape, n_output=n_output, config=config, device=device, logger=logger)
         self.MIN_SEQ_SIZE = 4
-        del self.id_range  # Not useful in Recurrent Replay
-
-        self.prioritize_max_mean_balance = config["prioritize_max_mean_balance"]
 
         # Reduce memory footprint by reducing the number of memory cell available
         self.episode_length = np.zeros(self.memory_size // self.MIN_SEQ_SIZE)
 
         if self.use_prioritization:
+            self.prioritize_max_mean_balance = config["prioritize_max_mean_balance"]
             self.prioritize_p = np.zeros(self.memory_size // self.MIN_SEQ_SIZE)
-
+            self.prioritize_p[0] = 1
+            del self.id_range  # Not useful in Recurrent Replay
         self.last_position = 0
-
-    def _store_episode(self, episode_to_store):
-        RecurrentReplayBuffer._store_episode(self, episode_to_store)
-    def sample(self, batch_size):
-        return RecurrentReplayBuffer.sample(self, batch_size)
     def __len__(self):
         return int(self.len_sum)
 

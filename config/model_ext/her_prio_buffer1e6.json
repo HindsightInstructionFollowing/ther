@@ -1,0 +1,10 @@
+{
+  "name": "buffer1e6_prio_her",
+  "algo_params": {
+    "experience_replay_config": {
+      "use_her" : true,
+      "prioritize" : true,
+      "size": 1e6
+      }
+    }
+}

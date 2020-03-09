@@ -1,0 +1,13 @@
+{
+  "name": "prio_her_decay_1e-5",
+  "algo_params": {
+    "experience_replay_config": {
+      "use_her" : true,
+      "prioritize" : true
+      },
+
+    "weight_decay" : 1e-5
+
+
+    }
+}

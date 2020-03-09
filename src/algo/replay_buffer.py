@@ -1,3 +1,5 @@
+# encoding: utf-8
+
 import operator
 import random
 import numpy as np
@@ -63,7 +65,7 @@ class AbstractReplay(ABC):
         if self.use_prioritization:
             prioritize_proba = self.prioritize_p[:self.n_memory_cell] / self.prioritize_p[:self.n_memory_cell].sum()
 
-            self.last_id_sampled = np.random.choice(self.id_range,
+            self.last_id_sampled = np.random.choice(self.id_range[:self.n_memory_cell],
                                                     size=batch_size,
                                                     replace=True,
                                                     p=prioritize_proba)
@@ -123,8 +125,9 @@ class AbstractReplay(ABC):
         self.last_transitions.pop(0)
 
     def update_transitions_proba(self, errors):
-        delta = errors + self.prioritize_eps
-        self.prioritize_p[self.last_id_sampled] = np.power(delta, self.prioritize_alpha)
+        if self.use_prioritization:
+            delta = errors + self.prioritize_eps
+            self.prioritize_p[self.last_id_sampled] = np.power(delta, self.prioritize_alpha)
 
     def compute_is_weights(self, prioritize_proba):
         min_proba = np.min(prioritize_proba[:len(self)])
@@ -255,9 +258,8 @@ class RecurrentReplayBuffer(ReplayBuffer):
         If prioritization is used, the length doesn't matter
         The strategy employed in R2D2 : https://openreview.net/pdf?id=r1lyTjAqYX
 
-        The p of a sequence of i element is : η * max δi + (1−η) * mean(δ)
+        The p of a sequence  is : η * max_i δi + (1−η) * mean(δ)
         η is self.prioritize_max_mean_balance, balancing between max and mean of the TD error (δ)
-
         """
         len_episode = len(episode_to_store)
 
@@ -307,19 +309,37 @@ class RecurrentReplayBuffer(ReplayBuffer):
 
         return batch_seq, is_weights
 
+    def compute_is_weights(self, prioritize_proba):
+        min_proba = np.min(prioritize_proba[:len(self)])
+        max_w = (len(self) * min_proba) ** - self.prioritize_beta
+
+        is_weights = np.power(prioritize_proba[self.last_id_sampled] * len(self), - self.prioritize_beta)
+
+        episode_length_sampled = self.episode_length[self.last_id_sampled]
+        is_weights_expanded = torch.zeros(int(episode_length_sampled.sum()))
+        last_id = 0
+        for i, weight in enumerate(is_weights):
+            current_length = int(episode_length_sampled[i])
+            is_weights_expanded[last_id:current_length] = weight
+            last_id += current_length
+
+        is_weights_expanded /= max_w
+        return is_weights_expanded
+
     def update_transitions_proba(self, errors):
 
-        td_err = []
-        last_l = 0
-        errors = np.power(errors, self.prioritize_alpha)
-        for l in self.episode_length[self.last_id_sampled]:
-            l = int(l)
-            err_list = errors[last_l:last_l+l]
-            err = self.prioritize_max_mean_balance * np.max(err_list) + (1 - self.prioritize_max_mean_balance) * np.mean(err_list)
-            td_err.append(err)
-            last_l += l
+        if self.use_prioritization:
+            td_err = []
+            last_l = 0
+            errors = np.power(errors, self.prioritize_alpha)
+            for l in self.episode_length[self.last_id_sampled]:
+                l = int(l)
+                err_list = errors[last_l:last_l+l]
+                err = self.prioritize_max_mean_balance * np.max(err_list) + (1 - self.prioritize_max_mean_balance) * np.mean(err_list)
+                td_err.append(err)
+                last_l += l
 
-        self.prioritize_p[self.last_id_sampled] = td_err
+            self.prioritize_p[self.last_id_sampled] = td_err
 
     def __len__(self):
         return int(self.len_sum)
