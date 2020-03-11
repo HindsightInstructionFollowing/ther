@@ -6,6 +6,26 @@ import torch
 from nltk.translate import bleu_score
 import numpy as np
 import pickle as pkl
+import json
+from config import override_config_recurs
+import matplotlib.pyplot as plt
+
+
+def translate(sentence, i2w):
+    for id in sentence:
+        print(i2w[id], end=' ')
+    print("")
+
+def save_images(test_state):
+    for im in range(test_state.size(0)):
+        i = test_state[im].permute(1, 2, 0).cpu().numpy() / 255
+        plt.imsave("state{}.png".format(im), i)
+
+def post_process(obj_name, test_instruction, generated_instruction, test_state, i2w):
+    print(obj_name)
+    translate(test_instruction, i2w)
+    translate(generated_instruction, i2w)
+    save_images(test_state)
 
 def accuracy(prediction_sentence, true_sentence):
     min_length = min(prediction_sentence.shape[0], true_sentence.shape[0])
@@ -16,15 +36,7 @@ def accuracy(prediction_sentence, true_sentence):
 
     return accuracy / min_length
 
-config = {
-    "hindsight_reward": 0.8,
-    "use_her": False,
-    "size": 40000,
-    "n_step" : 1,
-    "gamma" : 0.99,
-
-    "use_compression" : False,
-
+ext_config = {
     "ther_params": {
         "accuracy_convergence": 0.96,
         "max_steps_optim" : 400,
@@ -32,7 +44,7 @@ config = {
 
         "lr": 3e-4,
         "batch_size": 128,
-        "weight_decay": 1e-4,
+        "weight_decay": 1e-3,
         "update_steps": [30, 300, 1000],
         "n_sample_before_using_generator": 300,
 
@@ -51,10 +63,23 @@ config = {
             "embedding_dim": 512,
             "generator_max_len": 10,
 
-            "dropout": 0.5,
-            "decoder_hidden": 256
+            "dropout": 0.8,
+            "decoder_hidden": 512
         }
     }}
+
+
+
+config = json.load(open("config/model/conv_vizdoom_recurrent.json"))
+
+n_step = config["algo_params"]["n_step"]
+gamma = config["algo_params"]["gamma"]
+
+config = config["algo_params"]["experience_replay_config"]
+config = override_config_recurs(config, ext_config)
+
+config["n_step"] = n_step
+config["gamma"] = gamma
 
 device = 'cuda'
 
@@ -98,7 +123,7 @@ while True:
 
         test_state = torch.Tensor(test_state).squeeze(0).to(device)
 
-        generated_instruction = replay.instruction_generator.generate(test_state)
+        generated_instruction = replay.generate(test_state)
 
         all_references = [[vocab[w] for w in sentence.split()] for sentence in all_instructions[obj_name]]
         test_instruction = test_instruction[1:-1].numpy()

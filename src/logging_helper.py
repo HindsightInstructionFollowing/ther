@@ -69,7 +69,7 @@ class SweetLogger(SummaryWriter):
             json.dump(self.sentence_to_log, fp=open(sentences_path, 'w'), indent='    ', separators=('',':'))
 
             # Dump buffer id
-            id_file_name = "id_count_step_{:08}_{}.json".format(self.next_dump_step, 'train' if train else 'test')
+            id_file_name = "id_count_step{}.json".format('train' if train else 'test')
             id_log_path = path.join(self.path_to_log, id_file_name)
             json.dump(self.buffer_id_to_log, fp=open(id_log_path, 'w'), indent='    ', separators=('', ':'))
 
@@ -100,10 +100,11 @@ class SweetLogger(SummaryWriter):
 
     def store_buffer_id(self, ids):
         for id in ids:
+            id = str(id)
             if id in self.buffer_id_to_log:
-                self.buffer_id_to_log[str(id)] += 1
+                self.buffer_id_to_log[id] += 1
             else:
-                self.buffer_id_to_log[str(id)] = 1
+                self.buffer_id_to_log[id] = 1
 
 
     def store_sentences(self, sentence, reward):

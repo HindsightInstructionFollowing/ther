@@ -12,6 +12,8 @@
       "conv_layers_size" : [8,4,4],
       "conv_layers_stride" : [4,2,2],
       "max_pool_layers" : [0,0,0],
+      "batch_norm_layers" : [1, 0, 0],
+
       "projection_after_conv" : 256,
 
       "use_gated_attention" : true,
@@ -43,7 +45,7 @@
       "prioritize_max_mean_balance" : 0.9,
 
       "ther_params": {
-          "accuracy_convergence": 0.96,
+          "accuracy_convergence": 0.94,
           "max_steps_optim" : 2000,
           "tolerance_convergence": 1e-5,
 
@@ -56,20 +58,21 @@
           "n_state_to_predict_instruction": 7,
 
           "architecture_params": {
-              "conv_layers_channel" : [32, 64, 64],
-              "conv_layers_size" : [8,4,4],
-              "conv_layers_stride" : [4,2,2],
-              "max_pool_layers": [0, 0, 0],
+            "conv_layers_channel" : [32, 64, 64],
+            "conv_layers_size" : [8,4,4],
+            "conv_layers_stride" : [4,2,2],
+            "max_pool_layers": [0, 0, 0],
+            "batch_norm_layers" : [1, 0, 0],
 
-              "projection_after_conv": 512,
 
-              "trajectory_encoding_rnn": 512,
+            "projection_after_conv": 512,
+            "trajectory_encoding_rnn": 512,
 
-              "embedding_dim": 512,
-              "generator_max_len": 10,
+            "embedding_dim": 512,
+            "generator_max_len": 10,
 
-              "dropout": 0.5,
-              "decoder_hidden": 256
+            "dropout": 0.75,
+            "decoder_hidden": 512
           }
         }
     },

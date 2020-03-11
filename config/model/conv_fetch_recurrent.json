@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_recurrent_buffer4e5",
+  "name" : "minigrid_recurrent_buffer4e5_batch_norm",
   "algo" : "rdqn",
   "device" : "cuda",
 
@@ -8,11 +8,11 @@
   "algo_params": {
     "architecture" : "conv_lstm",
     "architecture_params" : {
-
       "conv_layers_channel" : [32,64,128],
       "conv_layers_size" : [2,2,2],
       "conv_layers_stride" : [1,1,1],
       "max_pool_layers" : [2,0,0],
+      "batch_norm_layers" : [1, 0, 0],
 
       "use_gated_attention" : false,
       "projection_after_conv" : 0,

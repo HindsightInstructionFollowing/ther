@@ -141,6 +141,9 @@ class AbstractReplay(ABC):
     def __len__(self):
         return self.n_memory_cell
 
+    def generate(self, *args, **kwargs):
+        raise AttributeError("generate() is not available in generic replay buffer")
+
     @abstractmethod
     def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length,
                        hindsight_mission, correct_obj_name):
@@ -226,8 +229,8 @@ class ReplayBuffer(AbstractReplay):
             self.current_episode = []
 
 class RecurrentReplayBuffer(ReplayBuffer):
-    def __init__(self, config):
 
+    def __init__(self, config):
         self.len_sum = 0
         self.MIN_SEQ_SIZE = 1
         super().__init__(config=config)

@@ -1,0 +1,9 @@
+{
+  "name": "prio_no_her",
+  "algo_params": {
+    "experience_replay_config": {
+      "use_her" : false,
+      "prioritize" : true
+      }
+    }
+}

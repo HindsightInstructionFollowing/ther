@@ -48,17 +48,23 @@ class MlpNet(nn.Module):
         out = F.relu(self.fc2(out))
         return self.fc3(out)
 
-def conv_factory(input_shape, channels, kernels, strides, max_pool):
+def conv_factory(input_shape, channels, kernels, strides, max_pool, batch_norm):
     assert len(input_shape) == 3, "shape should be 3 dimensionnal"
+
     conv_net = nn.Sequential()
     last_layer_channel = input_shape[0]
     for layer in range(len(channels)):
         conv_net.add_module(name='conv{}'.format(layer),
-                                 module=nn.Conv2d(in_channels=last_layer_channel,
-                                                  out_channels=channels[layer],
-                                                  kernel_size=kernels[layer],
-                                                  stride=strides[layer])
-                                 )
+                            module=nn.Conv2d(in_channels=last_layer_channel,
+                                             out_channels=channels[layer],
+                                             kernel_size=kernels[layer],
+                                             stride=strides[layer])
+                            )
+
+        if batch_norm[layer]:
+            conv_net.add_module('batch_norm'.format(layer),
+                                module=nn.BatchNorm2d(channels[layer]))
+
         conv_net.add_module(name='relu{}'.format(layer),
                                  module=nn.ReLU()
                                  )
@@ -84,17 +90,13 @@ class MinigridRecurrentPolicy(nn.Module):
         # ================= VISION ====================
         # =============================================
 
-        # xxxxx_list[0] correspond to the first conv layer, xxxxx_list[1] to the second etc ...
-        channel_list = config["conv_layers_channel"] if "conv_layers_channel" in config else [16, 32, 64]
-        kernel_list = config["conv_layers_size"] if "conv_layers_size" in config else [2, 2, 2]
-        stride_list = config["conv_layers_stride"] if "conv_layers_stride" in config else [1, 1, 1]
-        max_pool_list = config["max_pool_layers"] if "max_pool_layers" in config else [2, 0, 0]
-
+        channel_list =  config["conv_layers_channel"]
         self.conv_net, self.size_after_conv = conv_factory(input_shape=obs_space["image"].shape,
                                                            channels=channel_list,
-                                                           kernels=kernel_list,
-                                                           strides=stride_list,
-                                                           max_pool=max_pool_list)
+                                                           kernels=config["conv_layers_size"],
+                                                           strides=config["conv_layers_stride"],
+                                                           max_pool=config["max_pool_layers"],
+                                                           batch_norm=config["batch_norm_layers"])
 
         # ====================== TEXT ======================
         # ==================================================
@@ -271,17 +273,13 @@ class MinigridConvPolicy(nn.Module, RecurrentACModel):
         self.height = h
         self.width = w
 
-        # xxxxx_list[0] correspond to the first conv layer, xxxxx_list[1] to the second etc ...
-        channel_list = config["conv_layers_channel"] if "conv_layers_channel" in config else [16, 32, 64]
-        kernel_list = config["conv_layers_size"] if "conv_layers_size" in config else [2, 2, 2]
-        stride_list = config["conv_layers_stride"] if "conv_layers_stride" in config else [1, 1, 1]
-        max_pool_list = config["max_pool_layers"] if "max_pool_layers" in config else [2, 0, 0]
-
+        channel_list = config["conv_layers_channel"]
         self.conv_net, self.size_after_conv = conv_factory(input_shape=obs_space["image"].shape,
                                                            channels=channel_list,
-                                                           kernels=kernel_list,
-                                                           strides=stride_list,
-                                                           max_pool=max_pool_list)
+                                                           kernels=config["conv_layers_size"],
+                                                           strides=config["conv_layers_stride"],
+                                                           max_pool=config["max_pool_layers"],
+                                                           batch_norm=config["batch_norm_layers"])
 
         # ====================== TEXT ======================
         # ==================================================
@@ -441,9 +439,6 @@ class InstructionGenerator(nn.Module):
         self.input_shape = input_shape
 
         channel_list =                        config["conv_layers_channel"]
-        kernel_list =                         config["conv_layers_size"]
-        stride_list =                         config["conv_layers_stride"]
-        max_pool_list =                       config["max_pool_layers"]
         projection_after_conv =               config["projection_after_conv"]
         self.n_state_to_predict_instruction = config["n_state_to_predict_instruction"]
         trajectory_encoding_rnn             = config["trajectory_encoding_rnn"]
@@ -452,11 +447,14 @@ class InstructionGenerator(nn.Module):
         hidden_size =           config["decoder_hidden"]
 
         conv_input = self.input_shape[-3:]
-        self.conv_net, size_after_conv = conv_factory(input_shape=conv_input,
-                                                      channels=channel_list,
-                                                      kernels=kernel_list,
-                                                      strides=stride_list,
-                                                      max_pool=max_pool_list)
+        self.conv_net, self.size_after_conv = conv_factory(input_shape=conv_input,
+                                                           channels=channel_list,
+                                                           kernels=config["conv_layers_size"],
+                                                           strides=config["conv_layers_stride"],
+                                                           max_pool=config["max_pool_layers"],
+                                                           batch_norm=config["batch_norm_layers"])
+
+
 
         embedding_size = config["embedding_dim"]
         self.word_embedder = nn.Embedding(num_embeddings=self.vocabulary_size,
@@ -464,30 +462,30 @@ class InstructionGenerator(nn.Module):
                                           padding_idx=2)
 
         if projection_after_conv:
-            self.project_after_conv = nn.Linear(size_after_conv, projection_after_conv)
-            size_after_conv = projection_after_conv
+            self.project_after_conv = nn.Linear(self.size_after_conv, projection_after_conv)
+            self.size_after_conv = projection_after_conv
         else:
             self.project_after_conv = lambda x:x
 
         if self.n_state_to_predict_instruction > 1:
-            self.trajectory_encoding = nn.GRU(input_size=size_after_conv,
+            self.trajectory_encoding = nn.GRU(input_size=self.size_after_conv,
                                               hidden_size=trajectory_encoding_rnn,
                                               num_layers=1,
                                               batch_first=True)
 
             self.rnn_decoder = AttnDecoderRNN(input_size=embedding_size+trajectory_encoding_rnn,
-                                              hidden_size=size_after_conv,
-                                              output_size=size_after_conv,
+                                              hidden_size=self.size_after_conv,
+                                              output_size=self.size_after_conv,
                                               max_length=self.n_state_to_predict_instruction,
                                               device=self.device)
         else:
             self.rnn_decoder = DummyAttnDecoder(input_size=config["embedding_dim"],
-                                                hidden_size=size_after_conv)
+                                                hidden_size=self.size_after_conv)
 
 
 
 
-        self.mlp_decoder_hidden = nn.Linear(in_features=int(size_after_conv), out_features=hidden_size)
+        self.mlp_decoder_hidden = nn.Linear(in_features=int(self.size_after_conv), out_features=hidden_size)
         self.mlp_decoder = nn.Linear(in_features=hidden_size, out_features=n_output)
         self.dropout = nn.Dropout(dropout)
 
@@ -549,7 +547,7 @@ class InstructionGenerator(nn.Module):
 
         return logits
 
-    def generate(self, states_seq):
+    def _generate(self, states_seq):
 
         states_seq = states_seq[-self.n_state_to_predict_instruction:]
 

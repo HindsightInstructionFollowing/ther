@@ -4,7 +4,6 @@
     "architecture": "conv_lstm",
     "experience_replay_config": {
         "hindsight_reward": 1,
-        "size": 100000,
         "use_ther": true,
         "ther_params": {
           "accuracy_convergence": 0.96,

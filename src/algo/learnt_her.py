@@ -57,6 +57,10 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
         return good_attributes
 
+    def generate(self, states_seq):
+        states_seq = (states_seq - self.mean_norm.expand_as(states_seq)) / self.std_norm.expand_as(states_seq)
+        return self.instruction_generator._generate(states_seq)
+
     def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission, correct_obj_name):
 
         # ============= Apply n-step and store transitions in temporary episode ====================
@@ -109,7 +113,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                     trajectory =      [self.dummy_state] * (self.n_state_to_predict_instruction - len(trajectory)) + trajectory
                 trajectory =      torch.cat(trajectory, dim=0).to(self.device)
 
-                generated_hindsight_mission = self.instruction_generator.generate(trajectory)
+                generated_hindsight_mission = self.generate(trajectory)
 
                 if trajectory.size(2) == 7: # Check only for minigrid (vizdoom instruction are different)
                     n_correct_attrib = self._cheat_check(true_mission=hindsight_mission,
@@ -178,6 +182,14 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                                             key=lambda x: -x[0].size(0)))
 
         states = torch.cat(states, dim=0)
+
+        self.mean_norm = states.mean(dim=(0, 1))
+        self.std_norm = states.std(dim=(0, 1))
+        states = (states - self.mean_norm.expand_as(states)) / self.std_norm.expand_as(states)
+
+        self.mean_norm = self.mean_norm.to('cuda')
+        self.std_norm = self.std_norm.to('cuda')
+
         lengths = torch.LongTensor(lengths)
         instructions = torch.nn.utils.rnn.pad_sequence(sequences=instructions,
                                                        batch_first=True,
@@ -263,7 +275,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             self.logger.add_scalar("gen/generator_loss", loss.detach().item(), self.n_update_generator)
             self.logger.add_scalar("gen/generator_accuracy", accuracy, self.n_update_generator)
 
-class LearntHindsightRecurrentExperienceReplay(RecurrentReplayBuffer, LearntHindsightExperienceReplay):
+class LearntHindsightRecurrentExperienceReplay(LearntHindsightExperienceReplay, RecurrentReplayBuffer):
 
     def __init__(self, input_shape, n_output, config, device, logger=None):
         self.len_sum = 0
@@ -277,8 +289,9 @@ class LearntHindsightRecurrentExperienceReplay(RecurrentReplayBuffer, LearntHind
             self.prioritize_max_mean_balance = config["prioritize_max_mean_balance"]
             self.prioritize_p = np.zeros(self.memory_size // self.MIN_SEQ_SIZE)
             self.prioritize_p[0] = 1
-            del self.id_range  # Not useful in Recurrent Replay
+            #del self.id_range  # Not useful in Recurrent Replay
         self.last_position = 0
+
     def __len__(self):
         return int(self.len_sum)
 
