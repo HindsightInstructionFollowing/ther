@@ -144,6 +144,8 @@ def load_config(env_config_file, model_config_file, seed,
     if not os.path.exists(path_to_expe):
         os.mkdir(path_to_expe)
 
+    print(full_config["model_name"])
+    print(full_config["env_name"])
     return full_config, path_to_expe
 
 

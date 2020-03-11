@@ -1,5 +1,5 @@
 {
-  "name" : "doom_rdddqn_downscale_action_buffer4e5_smaller_archi",
+  "name" : "doom_rdddqn_buffer4e5_smaller_archi_bn",
   "algo" : "rdqn",
   "device" : "cuda",
 
