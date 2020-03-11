@@ -1,0 +1,33 @@
+{
+  "name" : "vizdoom_hard_downscale84",
+  "gym_name" : null,
+
+  "env_type" : "vizdoom",
+
+  "n_env_iter" : 2e6,
+
+  "q_visualizer_proba_log" : 0,
+  "q_visualizer_ep_num_to_log" : [1, 10, 100, 1000, 5000, 10000, 15000, 20000, 25000, 30000, 60000],
+
+  "env_params" : {
+    "max_episode_length" : 30,
+    "living_reward" : 0,
+    "difficulty" : "hard",
+    "frame_width" : 84,
+    "frame_height" : 84,
+    "visualize" : 0,
+    "sleep" : 0,
+    "use_train_instructions" : 1,
+    "scenario_path" : "src/vizdoom_utils/maps/room.wad",
+    "interactive" : 0,
+    "all_instr_file" : "src/vizdoom_utils/data/all_instructions.json",
+    "train_instr_file" : "src/vizdoom_utils/data/instructions_train.json",
+    "test_instr_file" : "src/vizdoom_utils/data/instructions_test.json",
+    "object_size_file" : "src/vizdoom_utils/data/object_sizes.txt"
+  },
+
+  "wrappers_env" : [
+      {"name" : "vizdoom2minigrid",  "params" : {}},
+      {"name" : "lastactionwrapper", "params" : {}}
+  ]
+}

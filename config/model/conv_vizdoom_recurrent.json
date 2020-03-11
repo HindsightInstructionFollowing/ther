@@ -64,7 +64,6 @@
             "max_pool_layers": [0, 0, 0],
             "batch_norm_layers" : [1, 0, 0],
 
-
             "projection_after_conv": 512,
             "trajectory_encoding_rnn": 512,
 
