@@ -1,5 +1,5 @@
 {
-  "name" : "doom_rdddqn_buffer4e5_smaller_archi_bn",
+  "name" : "doom_rdddqn_buffer4e5_smaller_archi_bn_clip40",
   "algo" : "rdqn",
   "device" : "cuda",
 
@@ -80,6 +80,7 @@
     "batch_size" : 128,
     "n_optimize_per_step" : 1,
     "lr" : 1e-5,
+    "grad_norm_limit" : 40,
     "n_step" : 1,
     "gamma" : 0.99,
     "update_target_every" : 20000,

@@ -204,9 +204,10 @@ class RecurrentDQN(BaseDoubleDQN):
         loss.backward()
 
         # Keep the gradient between (-1,1). Works like one uses L1 loss for large gradients (see Huber loss)
-        for name, param in self.policy_net.named_parameters():
-            if hasattr(param.grad, 'data'):
-                param.grad.data.clamp_(-1, 1)
+        grad_norm = nn.utils.clip_grad_norm_(self.policy_net.parameters(), self.grad_norm_limit)
+        # for name, param in self.policy_net.named_parameters():
+        #     if hasattr(param.grad, 'data'):
+        #         param.grad.data.clamp_(-self.grad_norm_limit, self.grad_norm_limit)
 
         # self.old_parameters = dict()
         # for k, v in self.target_net.state_dict().items():
@@ -227,6 +228,7 @@ class RecurrentDQN(BaseDoubleDQN):
         # Log important info, see logging_helper => SweetLogger for more details
         if self.writer:
             self.writer.store_buffer_id(self.replay_buffer.last_id_sampled)
+            self.writer.log("train/grad_norm", grad_norm)
             self.writer.log("train/percent_terminal", batch_terminal.sum().item() / self.batch_size)
             self.writer.log("train/n_update_target", self.n_update_target)
 

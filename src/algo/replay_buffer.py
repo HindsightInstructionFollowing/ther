@@ -234,7 +234,6 @@ class RecurrentReplayBuffer(ReplayBuffer):
         self.len_sum = 0
         self.MIN_SEQ_SIZE = 1
         super().__init__(config=config)
-        del self.id_range # Not useful in Recurrent Replay
 
         self.prioritize_max_mean_balance = config["prioritize_max_mean_balance"]
 
@@ -242,6 +241,7 @@ class RecurrentReplayBuffer(ReplayBuffer):
         self.episode_length = np.zeros(self.memory_size // self.MIN_SEQ_SIZE)
 
         if self.use_prioritization:
+            del self.id_range # Not useful in Recurrent Replay
             self.prioritize_p = np.zeros(self.memory_size // self.MIN_SEQ_SIZE)
             self.prioritize_p[0] = 1
 

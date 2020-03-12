@@ -1,23 +1,14 @@
 {
-  "name": "buffer1e6_ther_acc96_steps150_max2000_prio",
+  "name": "ther_prio",
   "algo_params": {
     "architecture": "conv_lstm",
     "experience_replay_config": {
         "hindsight_reward": 1,
-        "size": 100000,
         "use_ther": true,
         "prioritize" : true,
-
         "ther_params": {
-          "accuracy_convergence": 0.96,
-          "max_steps_optim": 2000,
-          "tolerance_convergence": 1e-5,
-          "lr": 3e-4,
-          "batch_size": 128,
-          "weight_decay": 1e-4,
           "update_steps": 150,
-          "n_sample_before_using_generator": 300,
-          "n_state_to_predict_instruction": 7
+          "n_sample_before_using_generator": 302
         }
       }
     }

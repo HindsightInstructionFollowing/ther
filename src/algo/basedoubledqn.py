@@ -81,6 +81,7 @@ class BaseDoubleDQN(nn.Module):
         self.current_epsilon = self.epsilon_init
         self.total_steps = 0
 
+        self.grad_norm_limit = config["grad_norm_limit"]
         self.update_target_every = config["update_target_every"]
         self.n_update_target = 0
 
@@ -199,9 +200,10 @@ class BaseDoubleDQN(nn.Module):
         loss.backward()
 
         # Keep the gradient between (-1,1). Works like one uses L1 loss for large gradients (see Huber loss)
-        for name, param in self.policy_net.named_parameters():
-            if hasattr(param.grad, 'data'):
-                param.grad.data.clamp_(-1, 1)
+        nn.utils.clip_grad_norm(self.policy_net.parameters(), self.grad_norm_limit)
+        # for name, param in self.policy_net.named_parameters():
+        #     if hasattr(param.grad, 'data'):
+        #         param.grad.data.clamp_(-self.grad_norm_limit, self.grad_norm_limit)
 
         # self.old_parameters = dict()
         # for k, v in self.target_net.state_dict().items():
