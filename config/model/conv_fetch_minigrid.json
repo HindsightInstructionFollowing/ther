@@ -30,6 +30,9 @@
     },
 
     "experience_replay_config" : {
+      "num_workers" : 8,
+      "batch_size" : 128,
+
       "hindsight_reward" : 1,
       "size" : 500000,
       "use_her" : false,
@@ -45,21 +48,22 @@
       "ther_params" : {
         "accuracy_convergence" : 0.9,
         "max_steps_optim" : 2000,
-
+        "batch_size_generator" : 128,
         "lr" : 3e-4,
-        "batch_size" : 128,
         "weight_decay" : 1e-3,
         "update_steps": 150,
 
         "n_sample_before_using_generator" : 300,
-        "n_state_to_predict_instruction": 7,
+        "n_state_to_predict_instruction": 1,
 
         "architecture_params": {
           "conv_layers_channel" : [20,36,70],
           "conv_layers_size" : [2,2,2],
           "conv_layers_stride" : [1,1,1],
+          "batch_norm_layers" : [0,0,0],
           "max_pool_layers" : [2,0,0],
 
+          "trajectory_encoding_rnn": 256,
           "projection_after_conv" : 0,
 
           "embedding_dim" : 32,

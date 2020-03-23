@@ -1,4 +1,4 @@
-from algo.replay_buffer import AbstractReplay, RecurrentReplayBuffer
+from algo.replay_buffer_parallel import ReplayBufferParallel
 from algo.neural_architecture import InstructionGenerator, compute_accuracy
 import numpy as np
 import torch
@@ -8,9 +8,13 @@ import pickle as pkl
 from nltk.translate import bleu_score
 import time
 
-class LearntHindsightExperienceReplay(AbstractReplay):
-    def __init__(self, input_shape, n_output, config, device, logger=None):
-        super().__init__(config)
+class LearntHindsightExperienceReplay(ReplayBufferParallel):
+    def __init__(self, config, is_recurrent, env = None, recurrent_memory_saving = 10, logger=None, device=None):
+
+        super().__init__(config, is_recurrent, env, recurrent_memory_saving)
+
+        input_shape = env.observation_space["image"].shape
+        n_output = int(env.observation_space["mission"].high.max())
 
         config = config["ther_params"]
 
@@ -31,7 +35,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                                                           device=device)
 
         # Loss and optimization
-        self.batch_size           = config["batch_size"]
+        self.batch_size_generator = config["batch_size_generator"]
         self.max_steps_optim =      config["max_steps_optim"]
         self.accuracy_convergence = config["accuracy_convergence"]
         self.loss =                 F.cross_entropy
@@ -61,7 +65,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         states_seq = (states_seq - self.mean_norm.expand_as(states_seq)) / self.std_norm.expand_as(states_seq)
         return self.instruction_generator._generate(states_seq)
 
-    def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission, correct_obj_name):
+    def add_transition(self, current_state, action, reward, next_state, terminal, mission, mission_length, hindsight_mission, correct_obj_name=None):
 
         # ============= Apply n-step and store transitions in temporary episode ====================
         # ==========================================================================================
@@ -76,14 +80,14 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         # The main idea is (almost-)invisible for the main algorithm, we just change the reward and the next state
         # The reward is the cumulative return until n-1 and next_state is the state after n step
         if len(self.last_states) >= self.n_step:
-            self.add_n_step_transition(self.n_step)
+            self.add_n_step_transition_to_ep(self.n_step)
 
         # If terminal, add all sample even if n_step is not available
         if terminal:
             truncate_n_step = 1
             while len(self.last_transitions) > 0:
                 current_n_step = self.n_step - truncate_n_step
-                self.add_n_step_transition(n_step=current_n_step)
+                self.add_n_step_transition_to_ep(n_step=current_n_step)
                 truncate_n_step += 1
 
             assert len(self.last_returns) == 0
@@ -93,7 +97,8 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
         # ==================== Deal with generator training and dataset ============================
         # ==========================================================================================
-        self.logger.log("gen/len_dataset", len(self.generator_dataset["states"]))
+        if self.logger:
+            self.logger.log("gen/len_dataset", len(self.generator_dataset["states"]))
         # Number of sample in the generator dataset
         n_generator_example = len(self.generator_dataset['states'])
         # If there are enough training example, train the generator
@@ -203,7 +208,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
 
         self.instruction_generator.train()
         while not convergence:
-            batch_idx = np.random.choice(range(len_dataset), self.batch_size)
+            batch_idx = np.random.choice(range(len_dataset), self.batch_size_generator)
             batch_state, batch_lengths = states[batch_idx].to(self.device), lengths[batch_idx].to(self.device)
             batch_instruction = instructions[batch_idx].to(self.device)
 
@@ -218,7 +223,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
             # If the last element of the longer sequence is <END> we need to add a <PAD> token.
             # Label size must matches output size
             if max_length in batch_lengths:
-                instruction_label = torch.cat((instruction_label, torch.ones(self.batch_size, 1).fill_(self.padding_value).long().to(self.device)), dim=1)
+                instruction_label = torch.cat((instruction_label, torch.ones(self.batch_size_generator, 1).fill_(self.padding_value).long().to(self.device)), dim=1)
             else:
                 # If all sequences are filled with <PAD> at the end, they will not be computed by generator,
                 # So we also remove them from labels
@@ -274,14 +279,6 @@ class LearntHindsightExperienceReplay(AbstractReplay):
         if self.logger:
             self.logger.add_scalar("gen/generator_loss", loss.detach().item(), self.n_update_generator)
             self.logger.add_scalar("gen/generator_accuracy", accuracy, self.n_update_generator)
-
-class LearntHindsightRecurrentExperienceReplay(LearntHindsightExperienceReplay, RecurrentReplayBuffer):
-    def __init__(self, input_shape, n_output, config, device, logger=None):
-        LearntHindsightExperienceReplay.__init__(self, input_shape=input_shape, n_output=n_output, config=config, device=device, logger=logger)
-
-
-
-
 
 if __name__ == "__main__":
     pass

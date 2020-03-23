@@ -53,6 +53,11 @@ def load_config(env_config_file, model_config_file, seed,
                 env_ext_file=None,
                 model_ext_file=None
                 ):
+
+    print(env_config_file)
+    print(model_config_file)
+    print(model_ext_file)
+
     # === Loading ENV config, extension and check integrity =====
     # ===========================================================
     if type(env_config_file) is str:

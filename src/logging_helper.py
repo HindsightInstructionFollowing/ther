@@ -106,7 +106,6 @@ class SweetLogger(SummaryWriter):
             else:
                 self.buffer_id_to_log[id] = 1
 
-
     def store_sentences(self, sentence, reward):
 
         reward = str(reward)
@@ -117,3 +116,4 @@ class SweetLogger(SummaryWriter):
             self.sentence_to_log[sentence][reward] = 0
 
         self.sentence_to_log[sentence][reward] += 1
+

@@ -5,15 +5,10 @@ import contextlib
 
 from algo.pg_base import RecurrentACModel, ACModel
 from torch.distributions.categorical import Categorical
-import collections
 
 from algo.attention_layer import AttnDecoderRNN, DummyAttnDecoder
 
 import numpy as np
-
-basic_transition = collections.namedtuple("Transition",
-                                          ["current_state", "action", "reward", "next_state", "terminal",
-                                           "mission", "mission_length", "gamma"])
 
 def init_weights(m):
     if type(m) == nn.Linear:
@@ -159,6 +154,11 @@ class MinigridRecurrentPolicy(nn.Module):
 
         # Adding memory to the agent
         self.memory_rnn = nn.LSTM(input_size=self.size_after_text_viz_merge, hidden_size=self.memory_size, batch_first=True)
+        self.use_layer_norm = config["use_layer_norm"]
+        if self.use_layer_norm:
+            # layer norm creation : 2 norms because lstm splits hidden into hx and cx
+            self.layer_norm_hx = nn.LayerNorm(normalized_shape=[self.memory_size])
+            self.layer_norm_cx = nn.LayerNorm(normalized_shape=[self.memory_size])
 
         self.critic = nn.Sequential(
             nn.Linear(self.memory_size, self.last_hidden_fc_size),
@@ -235,9 +235,16 @@ class MinigridRecurrentPolicy(nn.Module):
                                                                                   lengths=sequences_length,
                                                                                   batch_first=True,
                                                                                   enforce_sorted=False)
-        hidden_memory = (ht[:, :, :self.memory_size], ht[:, :, self.memory_size:])
-        all_ht, hidden_memory = self.memory_rnn(vision_and_text_sequence_format, hidden_memory)
 
+        hidden_memory = (ht[:, :, :self.memory_size], ht[:, :, self.memory_size:])
+
+        if self.use_layer_norm:
+            hidden_memory = (
+                self.layer_norm_hx(hidden_memory[0]),
+                self.layer_norm_cx(hidden_memory[1])
+            )
+
+        all_ht, hidden_memory = self.memory_rnn(vision_and_text_sequence_format, hidden_memory)
         all_ht, size = torch.nn.utils.rnn.pad_packed_sequence(all_ht, batch_first=True)
 
         memory = torch.cat(hidden_memory, dim=2)
@@ -245,6 +252,8 @@ class MinigridRecurrentPolicy(nn.Module):
         flatten_vision_and_text = all_ht.view(-1, self.memory_size)
 
         # Delete all useless padding in state sequences, to avoid computing the q-values for them
+        # If state sequence is shorter, padding doesn't match lstm's output, so remove trailing padding
+        padding_mask = padding_mask.view(all_ht.size(0), -1)[:, :all_ht.size(1)].contiguous().view(-1)
         flatten_vision_and_text_without_padding = flatten_vision_and_text[padding_mask == 1]
 
         # ===== Dueling architecture ======

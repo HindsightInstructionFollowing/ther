@@ -9,7 +9,9 @@ from abc import ABC
 from abc import abstractmethod
 
 from algo.compression import DummyCompressor, TransitionCompressor
-from algo.neural_architecture import basic_transition
+from algo.replay_buffer_tools import sample, sample_approx
+
+from algo.transition import basic_transition
 
 class AbstractReplay(ABC):
     def __init__(self, config):
@@ -19,7 +21,6 @@ class AbstractReplay(ABC):
         Sample are added to a temporary episode buffer
         When DONE is reach, the episode is added to the replay replay alongside a new one if HER is used
         """
-        self.transition = basic_transition
         self.stored_transitions = []
         self.current_episode = []
         self.hindsight_reward = config["hindsight_reward"]
@@ -96,7 +97,7 @@ class AbstractReplay(ABC):
 
         self.position += len_episode
 
-    def add_n_step_transition(self, n_step):
+    def add_n_step_transition_to_ep(self, n_step):
         current_state, action, mission, mission_length = self.last_transitions[0]
 
         # Not enough samples to apply full n-step, aborting this step
@@ -112,9 +113,9 @@ class AbstractReplay(ABC):
 
         self.current_episode.append(
             self.compressor.compress_transition(
-                self.transition(current_state=current_state, action=action, reward=sum_return, next_state=n_step_state,
-                                terminal=last_terminal, mission=mission, mission_length=mission_length,
-                                gamma=self.gamma_array[n_step])
+                basic_transition(current_state=current_state, action=action, reward=sum_return, next_state=n_step_state,
+                                 terminal=last_terminal, mission=mission, mission_length=mission_length,
+                                 gamma=self.gamma_array[n_step])
             )
         )
 
@@ -182,14 +183,14 @@ class ReplayBuffer(AbstractReplay):
         # The main idea is (almost-)invisible for the main algorithm, we just change the reward and the next state
         # The reward is the cumulative return until n-1 and next_state is the state after n step
         if len(self.last_states) >= self.n_step:
-            self.add_n_step_transition(self.n_step)
+            self.add_n_step_transition_to_ep(self.n_step)
 
         # If terminal, add all sample even if n_step is not available
         if terminal:
             truncate_n_step = 1
             while len(self.last_transitions) > 0:
                 current_n_step = self.n_step - truncate_n_step
-                self.add_n_step_transition(n_step = current_n_step)
+                self.add_n_step_transition_to_ep(n_step = current_n_step)
                 truncate_n_step += 1
 
             assert len(self.last_terminal) == 0
@@ -213,15 +214,14 @@ class ReplayBuffer(AbstractReplay):
                 else:
                     hindsight_reward = 0
 
-
-                hindsight_episode.append(self.transition(current_state=st,
-                                                         action=a,
-                                                         reward=hindsight_reward,
-                                                         next_state=st_plus1,
-                                                         terminal=end_ep,
-                                                         mission=torch.LongTensor(hindsight_mission),
-                                                         mission_length=torch.LongTensor([len(hindsight_mission)]),
-                                                         gamma=gamma))
+                hindsight_episode.append(basic_transition(current_state=st,
+                                                          action=a,
+                                                          reward=hindsight_reward,
+                                                          next_state=st_plus1,
+                                                          terminal=end_ep,
+                                                          mission=torch.LongTensor(hindsight_mission),
+                                                          mission_length=torch.LongTensor([len(hindsight_mission)]),
+                                                          gamma=gamma))
             self._store_episode(hindsight_episode)
 
         if terminal:
@@ -235,8 +235,6 @@ class RecurrentReplayBuffer(ReplayBuffer):
         self.MIN_SEQ_SIZE = 1
         super().__init__(config=config)
 
-        self.prioritize_max_mean_balance = config["prioritize_max_mean_balance"]
-
         # Reduce memory footprint by reducing the number of memory cell available
         self.episode_length = np.zeros(self.memory_size // self.MIN_SEQ_SIZE)
 
@@ -244,6 +242,7 @@ class RecurrentReplayBuffer(ReplayBuffer):
             del self.id_range # Not useful in Recurrent Replay
             self.prioritize_p = np.zeros(self.memory_size // self.MIN_SEQ_SIZE)
             self.prioritize_p[0] = 1
+            self.prioritize_max_mean_balance = config["prioritize_max_mean_balance"]
 
         self.last_position = 0
 
@@ -285,24 +284,13 @@ class RecurrentReplayBuffer(ReplayBuffer):
         self.len_sum = self.episode_length.sum()
 
     def sample(self, batch_size):
-        size = 0
-        batch_seq = []
-
-        id_taken = list()
 
         if self.use_prioritization:
             transition_proba = self.prioritize_p[:self.n_memory_cell] / self.prioritize_p[:self.n_memory_cell].sum()
         else:
             transition_proba = self.episode_length[:self.n_memory_cell] / self.episode_length[:self.n_memory_cell].sum()
 
-        while size < batch_size:
-            id_episode = np.random.choice(range(self.n_memory_cell), p=transition_proba)
-            seq = [self.compressor.decompress_transition(transition) for transition in self.memory[id_episode]]
-            size += len(seq)
-            batch_seq.append(seq)
-            id_taken.append(id_episode)
-
-        self.last_id_sampled = np.array(id_taken)
+        batch_seq, self.last_id_sampled = sample(self.memory, self.n_memory_cell, transition_proba, batch_size, self.compressor)
 
         # Compute is_weights
         if self.use_prioritization:
@@ -346,6 +334,14 @@ class RecurrentReplayBuffer(ReplayBuffer):
 
     def __len__(self):
         return int(self.len_sum)
+
+
+class RecurrentReplayBufferParallel(AbstractReplay):
+
+    def __init__(self):
+        pass
+
+
 
 
 if __name__ == "__main__":

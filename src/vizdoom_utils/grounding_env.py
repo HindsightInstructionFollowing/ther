@@ -74,7 +74,9 @@ class GroundingEnv(gym.core.Env):
         self.observation_space = gym.spaces.Dict(obs_space)
         self.reward_range = (WRONG_OBJECT_REWARD, CORRECT_OBJECT_REWARD)
         self.metadata = None
+
         self.max_steps = self.params.max_episode_length
+        self.mission_max_length = 8
 
     def game_init(self):
         """Starts the doom game engine."""

@@ -3,18 +3,15 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+from algo.transition import basic_transition
+
 import random
 import copy
 
 class RecurrentDQN(BaseDoubleDQN):
     def __init__(self, env, config, logger=None, visualizer=None, test_env=None, device='cpu'):
         super().__init__(env=env, test_env=test_env, config=config, logger=logger, visualizer=visualizer, device=device)
-
         self.fuse_text_before_memory = True
-
-        self.state_padding = torch.zeros(1, *self.env.observation_space["image"].shape)
-        self.action_padding = env.action_space.n
-        self.terminal_padding = 1
 
     def select_action(self, state, ht):
 
@@ -39,78 +36,13 @@ class RecurrentDQN(BaseDoubleDQN):
         self.total_steps += 1
         return action, q_values, new_ht.detach()
 
-    def preprocess_state_sequences(self, transitions):
-        """
-        Subsample, pad and batch states
-        """
-        max_length = len(max(transitions, key=lambda x:len(x)))
-        batch_dict = {
-            "state" :                  [],
-            "next_state" :             [],
-            "mission" :                [],
-            "mission_length" :         [],
-            "padding_mask" :           [],
-            "state_sequence_lengths" : [],
-            "terminal" :               [],
-            "last_action" :            [],
-            "action" :                 [],
-            "reward" :                 [],
-            "gamma" :                  [],
-            "max_sequence_length" : max_length
-        }
-
-        for state_sequences in transitions:
-            seq_length = len(state_sequences)
-            padding_length = max_length - seq_length
-            mask = [1 for i in range(max_length)]
-            transition_padding = []
-
-            if padding_length > 0:
-                dummy_transition = self.replay_buffer.transition(current_state=self.state_padding,
-                                                                 action=self.action_padding,
-                                                                 reward=0,
-                                                                 next_state=self.state_padding,
-                                                                 terminal=self.terminal_padding,
-                                                                 mission_length=state_sequences[0].mission_length,
-                                                                 mission=state_sequences[0].mission,
-                                                                 gamma=0
-                                                                 )
-
-                transition_padding = [dummy_transition] * padding_length
-                mask[seq_length:] = [0 for _ in range(padding_length)]
-
-            padded_sequences = state_sequences + transition_padding
-
-            batch_dict["state_sequence_lengths"].append(seq_length)
-            state_sequences_transitions = self.replay_buffer.transition(*zip(*padded_sequences))
-
-            batch_dict["state"].extend(           state_sequences_transitions.current_state)
-            batch_dict["next_state"].extend(      state_sequences_transitions.next_state)
-            batch_dict["terminal"].extend(        state_sequences_transitions.terminal)
-            batch_dict["action"].extend(          state_sequences_transitions.action)
-            batch_dict["mission"].extend(         state_sequences_transitions.mission)
-            batch_dict["mission_length"].extend(  state_sequences_transitions.mission_length)
-            batch_dict["reward"].extend(          state_sequences_transitions.reward)
-            batch_dict["gamma"].extend(           state_sequences_transitions.gamma)
-            batch_dict["padding_mask"].extend(                                mask)
-
-            batch_dict["last_action"].append(                                 self.action_padding)
-            batch_dict["last_action"].extend(     state_sequences_transitions.action[:-1])
-
-
-        assert len(batch_dict["padding_mask"]) == len(batch_dict["mission"])
-        assert len(batch_dict["padding_mask"]) == len(batch_dict["state"])
-        assert len(batch_dict["padding_mask"]) == len(batch_dict["last_action"])
-
-        return batch_dict
-
     def optimize_model(self, state, action, next_state, reward, done):
         hindsight_mission = next_state["hindsight_mission"] if "hindsight_mission" in next_state else None
         object_name = next_state["correct_obj_name"] if "correct_obj_name" in next_state else None
 
-        self.replay_buffer.add_transition(current_state=state["image"].cpu(),
+        self.replay_buffer.add_transition(current_state=state["image"].cpu().numpy(),
                                           action=action,
-                                          next_state=next_state["image"].cpu(),
+                                          next_state=next_state["image"].cpu().numpy(),
                                           reward=reward,
                                           mission=next_state["mission"][0].cpu(),
                                           mission_length=next_state["mission_length"].cpu(),
@@ -122,34 +54,30 @@ class RecurrentDQN(BaseDoubleDQN):
             return 0
 
         # Sample from the memory replay
-        transitions, is_weights = self.replay_buffer.sample(self.batch_size)
-
-        batch_dict = self.preprocess_state_sequences(transitions)
+        batch_dict, is_weights = self.replay_buffer.sample()
 
         # Padding mask corresponding to real transitions and fake padded one to allows for the lstm computation
-        batch_mask = torch.LongTensor(batch_dict["padding_mask"])
-        batch_sequence_length = torch.LongTensor(batch_dict["state_sequence_lengths"])
+        batch_mask =            batch_dict["padding_mask"].view(-1)
+        batch_sequence_length = batch_dict["state_sequence_lengths"].view(-1)
 
-        batch_curr_state = torch.cat(batch_dict["state"]).to(device=self.device)
-        batch_next_state = torch.cat(batch_dict["next_state"]).to(device=self.device)
+        batch_curr_state =      batch_dict["state"].to(device=self.device).view(-1, *self.env.observation_space["image"].shape)
+        batch_next_state =      batch_dict["next_state"].to(device=self.device).view(-1, *self.env.observation_space["image"].shape)
 
-        batch_mission = torch.nn.utils.rnn.pad_sequence(sequences=batch_dict["mission"],
-                                                        batch_first=True,
-                                                        padding_value=self.PADDING_MISSION).to(self.device)
-
-        batch_mission_length = torch.cat(batch_dict["mission_length"]).to(self.device)
+        batch_mission =         batch_dict["mission"].to(self.device).view(batch_curr_state.size(0), -1)
+        batch_mission_length =  batch_dict["mission_length"].to(self.device).view(-1)
 
         # Convert to torch and remove padding since it's not useful for those variables
-        batch_terminal = torch.as_tensor(batch_dict["terminal"], dtype=torch.int32)[batch_mask == 1].to(self.device)
-        batch_action_full = torch.LongTensor(batch_dict["action"]).to(device=self.device)
-        batch_action = batch_action_full[batch_mask == 1].view(-1, 1)
-        batch_last_action = torch.LongTensor(batch_dict["last_action"]).to(device=self.device)
-        batch_gamma = torch.FloatTensor(batch_dict["gamma"])[batch_mask == 1].view(-1, 1).to(device=self.device)
-        is_weights = torch.FloatTensor(is_weights).to(device=self.device)
+        batch_terminal =        batch_dict["terminal"].view(-1)[batch_mask == 1].to(self.device)
+        batch_action_full =     batch_dict["action"].to(device=self.device).view(-1)
+        batch_action =          batch_action_full[batch_mask == 1].view(-1, 1)
+        batch_last_action =     batch_dict["last_action"].to(device=self.device)
+        batch_gamma =           batch_dict["gamma"].type(torch.FloatTensor).view(-1)[batch_mask == 1].view(-1, 1).to(device=self.device)
+
+        is_weights =            torch.FloatTensor(is_weights).to(self.device)
 
         #============= Computing targets ===========
         #===========================================
-        targets = torch.FloatTensor(batch_dict["reward"])[batch_mask == 1].to(self.device).reshape(-1, 1)
+        targets = batch_dict["reward"].type(torch.FloatTensor).view(-1)[batch_mask == 1].to(self.device).reshape(-1, 1)
 
         batch_next_state_non_terminal_dict = {
             "image": batch_next_state,
@@ -158,7 +86,7 @@ class RecurrentDQN(BaseDoubleDQN):
             "last_action" : batch_action_full, # Can be useful for the lstm
             "padding_mask": batch_mask,
             "state_sequence_lengths": batch_sequence_length,
-            "max_sequence_length": batch_dict["max_sequence_length"]
+            "max_sequence_length": self.env.unwrapped.max_steps
         }
 
         # Double DQN : Selection of the action with the policy net
@@ -185,7 +113,7 @@ class RecurrentDQN(BaseDoubleDQN):
             "last_action" : batch_last_action,
             "padding_mask" : batch_mask,
             "state_sequence_lengths" : batch_sequence_length,
-            "max_sequence_length" : batch_dict["max_sequence_length"]
+            "max_sequence_length" : self.env.unwrapped.max_steps
         }
         predictions, _ = self.policy_net(batch_curr_state_dict)
         predictions = predictions.gather(1, batch_action).view(-1)
@@ -194,7 +122,7 @@ class RecurrentDQN(BaseDoubleDQN):
 
         # Update prio
         delta = torch.abs(predictions - targets).detach().cpu().numpy()
-        self.replay_buffer.update_transitions_proba(delta)
+        self.replay_buffer.update_transitions_proba(delta, batch_dict["id_retrieved"][0])
 
         # Loss
         loss = F.smooth_l1_loss(predictions, targets, reduction='none') * is_weights
@@ -204,10 +132,9 @@ class RecurrentDQN(BaseDoubleDQN):
         loss.backward()
 
         # Keep the gradient between (-1,1). Works like one uses L1 loss for large gradients (see Huber loss)
-        grad_norm = nn.utils.clip_grad_norm_(self.policy_net.parameters(), self.grad_norm_limit)
-        # for name, param in self.policy_net.named_parameters():
-        #     if hasattr(param.grad, 'data'):
-        #         param.grad.data.clamp_(-self.grad_norm_limit, self.grad_norm_limit)
+        for name, param in self.policy_net.named_parameters():
+            if hasattr(param.grad, 'data'):
+                param.grad.data.clamp_(-1, 1)
 
         # self.old_parameters = dict()
         # for k, v in self.target_net.state_dict().items():
@@ -227,8 +154,7 @@ class RecurrentDQN(BaseDoubleDQN):
 
         # Log important info, see logging_helper => SweetLogger for more details
         if self.writer:
-            self.writer.store_buffer_id(self.replay_buffer.last_id_sampled)
-            self.writer.log("train/grad_norm", grad_norm)
+            self.writer.store_buffer_id(batch_dict["id_retrieved"][0])
             self.writer.log("train/percent_terminal", batch_terminal.sum().item() / self.batch_size)
             self.writer.log("train/n_update_target", self.n_update_target)
 

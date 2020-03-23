@@ -5,8 +5,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from algo.neural_architecture import MinigridConvPolicy, MlpNet, MinigridRecurrentPolicy
-from algo.replay_buffer import ReplayBuffer, RecurrentReplayBuffer
-from algo.learnt_her import LearntHindsightExperienceReplay, LearntHindsightRecurrentExperienceReplay
+from algo.replay_buffer_parallel import ReplayBufferParallel
+
+from algo.transition import basic_transition
 
 import time
 
@@ -39,39 +40,28 @@ class BaseDoubleDQN(nn.Module):
         self.n_optimize_per_step = config["n_optimize_per_step"]
         self.n_update_policy_net = 0
 
-        self.batch_size = config["batch_size"]
+        self.batch_size = config["experience_replay_config"]["batch_size"]
         self.n_actions = env.action_space.n
 
         # Setting gamma and configuring n-step estimations
         config["experience_replay_config"]["n_step"] = config["n_step"]
         config["experience_replay_config"]["gamma"] = config["gamma"]
 
+        is_recurrent = config["architecture"] == "conv_lstm"
+
         # Create replay buffer here
         if config["experience_replay_config"]["use_ther"]:
-            input_shape = env.observation_space["image"].shape[-3:] # todo : input shape check, because of framestacking etc...
-            vocabulary_size = int(env.observation_space["mission"].high.max())
-
-            if config["architecture"] == "conv_lstm":
-                replay_buffer = LearntHindsightRecurrentExperienceReplay(input_shape=input_shape,
-                                                                         n_output=vocabulary_size,
-                                                                         config=config["experience_replay_config"],
-                                                                         device=device,
-                                                                         logger=logger
-                                                                         )
-            else:
-                replay_buffer = LearntHindsightExperienceReplay(input_shape=input_shape,
-                                                                n_output=vocabulary_size,
-                                                                config=config["experience_replay_config"],
-                                                                device=device,
-                                                                logger=logger
-                                                                )
-
-
+            replay_buffer = LearntHindsightRecurrentExperienceReplay(config=config["experience_replay_config"],
+                                                                     is_recurrent=is_recurrent,
+                                                                     env=env,
+                                                                     device=device,
+                                                                     logger=logger
+                                                                     )
         else:
-            if config["architecture"] == "conv_lstm":
-                replay_buffer = RecurrentReplayBuffer(config=config["experience_replay_config"])
-            else:
-                replay_buffer = ReplayBuffer(config=config["experience_replay_config"])
+            replay_buffer = ReplayBufferParallel(config=config["experience_replay_config"],
+                                                 is_recurrent=is_recurrent,
+                                                 env=env
+                                                 )
 
         self.replay_buffer = replay_buffer
 
@@ -138,7 +128,7 @@ class BaseDoubleDQN(nn.Module):
                                              key=lambda x: -x[0].mission.size(0))
                                       )
         # Batch the transitions into one namedtuple
-        batch_transitions = self.replay_buffer.transition(*zip(*transitions))
+        batch_transitions = basic_transition(*zip(*transitions))
 
         # Create batches data, easier to manipulate
         batch_curr_state = torch.cat(batch_transitions.current_state).to(device=self.device)

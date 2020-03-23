@@ -1,0 +1,12 @@
+{
+  "name": "prio_her",
+  "algo_params": {
+    "experience_replay_config": {
+      "use_her" : true,
+      "prioritize" : true
+      },
+
+    "batch_size" : 1e12
+
+    }
+}
