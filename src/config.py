@@ -123,12 +123,12 @@ def load_config(env_config_file, model_config_file, seed,
     model_config_path = os.path.join(model_path, "model_full_config.json")
     if not os.path.exists(model_config_path):
         config_file = open(model_config_path, 'w')
-        json.dump(obj=model_config, fp=config_file, indent='    ', separators=('',':'))
+        json.dump(obj=model_config, fp=config_file, indent='    ', separators=(',',':'))
 
         # Dump the extension file too, easier to visualize quickly
         model_ext_config_path = os.path.join(model_path, "model_ext_config.json")
         model_ext_config_file = open(model_ext_config_path, 'w')
-        json.dump(obj=model_ext_config, fp=model_ext_config_file, indent='    ', separators=('',':'))
+        json.dump(obj=model_ext_config, fp=model_ext_config_file, indent='    ', separators=(',',':'))
 
     else:
         if "osef" not in model_path:

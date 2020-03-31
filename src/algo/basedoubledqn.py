@@ -7,6 +7,8 @@ import torch.nn.functional as F
 from algo.neural_architecture import MinigridConvPolicy, MlpNet, MinigridRecurrentPolicy
 from algo.replay_buffer_parallel import ReplayBufferParallel
 
+from algo.learnt_her import LearntHindsightExperienceReplay
+
 from algo.transition import basic_transition
 
 import time
@@ -33,9 +35,17 @@ class BaseDoubleDQN(nn.Module):
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
-        self.optimizer = torch.optim.RMSprop(self.policy_net.parameters(),
-                                             lr=config["lr"],
-                                             weight_decay=config["weight_decay"])
+        self.optimize = config["optimize"] if "optimize" in config else True
+        if config["optimizer"].lower() == 'rmsprop':
+            self.optimizer = torch.optim.RMSprop(self.policy_net.parameters(),
+                                                 lr=config["lr"],
+                                                 weight_decay=config["weight_decay"])
+        elif config["optimizer"].lower() == 'adam':
+            self.optimizer = torch.optim.Adam(self.policy_net.parameters(),
+                                              lr=config["lr"],
+                                              weight_decay=config["weight_decay"])
+        else:
+            raise NotImplementedError("Optimizer '{}' doesn't exist".format(config["optimizer"].lower()))
 
         self.n_optimize_per_step = config["n_optimize_per_step"]
         self.n_update_policy_net = 0
@@ -51,12 +61,12 @@ class BaseDoubleDQN(nn.Module):
 
         # Create replay buffer here
         if config["experience_replay_config"]["use_ther"]:
-            replay_buffer = LearntHindsightRecurrentExperienceReplay(config=config["experience_replay_config"],
-                                                                     is_recurrent=is_recurrent,
-                                                                     env=env,
-                                                                     device=device,
-                                                                     logger=logger
-                                                                     )
+            replay_buffer = LearntHindsightExperienceReplay(config=config["experience_replay_config"],
+                                                            is_recurrent=is_recurrent,
+                                                            env=env,
+                                                            device=device,
+                                                            logger=logger
+                                                            )
         else:
             replay_buffer = ReplayBufferParallel(config=config["experience_replay_config"],
                                                  is_recurrent=is_recurrent,

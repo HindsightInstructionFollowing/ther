@@ -4,9 +4,12 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import pickle as pkl
+from os import path
 
 from nltk.translate import bleu_score
 import time
+
+from algo.transition import basic_transition
 
 class LearntHindsightExperienceReplay(ReplayBufferParallel):
     def __init__(self, config, is_recurrent, env = None, recurrent_memory_saving = 10, logger=None, device=None):
@@ -101,10 +104,13 @@ class LearntHindsightExperienceReplay(ReplayBufferParallel):
             self.logger.log("gen/len_dataset", len(self.generator_dataset["states"]))
         # Number of sample in the generator dataset
         n_generator_example = len(self.generator_dataset['states'])
+
         # If there are enough training example, train the generator
         if n_generator_example > self.generator_next_update:
             self._train_generator()
             self.generator_next_update += self.update_steps
+            generator_dataset_path = path.join(self.logger.path_to_log, "generator_dataset.pkl")
+            pkl.dump(self.generator_dataset, open(generator_dataset_path, "wb"))
 
         # ============= Apply Hinsight Experience Replay by swapping a mission =====================
         # ==========================================================================================
@@ -115,10 +121,10 @@ class LearntHindsightExperienceReplay(ReplayBufferParallel):
                 last_states =     self.current_episode[-self.n_state_to_predict_instruction:]
                 trajectory =      [self.compressor.decompress_elem(t.current_state) for t in last_states]
                 if len(trajectory) < self.n_state_to_predict_instruction:
-                    trajectory =      [self.dummy_state] * (self.n_state_to_predict_instruction - len(trajectory)) + trajectory
-                trajectory =      torch.cat(trajectory, dim=0).to(self.device)
+                    trajectory =  [self.dummy_state] * (self.n_state_to_predict_instruction - len(trajectory)) + trajectory
+                trajectory =      torch.FloatTensor(np.concatenate(trajectory, axis=0)).to(self.device)
 
-                generated_hindsight_mission = self.generate(trajectory)
+                generated_hindsight_mission, generated_hindsight_mission_len = self.generate(trajectory)
 
                 if trajectory.size(2) == 7: # Check only for minigrid (vizdoom instruction are different)
                     n_correct_attrib = self._cheat_check(true_mission=hindsight_mission,
@@ -149,9 +155,9 @@ class LearntHindsightExperienceReplay(ReplayBufferParallel):
                         hindsight_reward = 1 * self.gamma ** (len(self.current_episode) - step - 1)
                     else:
                         hindsight_reward = 0
-                    len_mission = torch.LongTensor([len(generated_hindsight_mission)])
+                    len_mission = torch.LongTensor([generated_hindsight_mission_len])
                     hindsight_episode.append(
-                        self.transition(st, a, hindsight_reward, st_plus1, end_ep, generated_hindsight_mission, len_mission, gamma)
+                        basic_transition(st, a, hindsight_reward, st_plus1, end_ep, generated_hindsight_mission, len_mission, gamma)
                     )
                 self._store_episode(hindsight_episode)
 
@@ -164,12 +170,10 @@ class LearntHindsightExperienceReplay(ReplayBufferParallel):
                 if len_traj < self.n_state_to_predict_instruction:
                     trajectory_to_predict = [self.dummy_state] * (self.n_state_to_predict_instruction - len_traj) + trajectory_to_predict
 
-                self.generator_dataset["states"].append(torch.cat(trajectory_to_predict, dim=0).unsqueeze(0))
+                self.generator_dataset["states"].append(np.expand_dims(np.concatenate(trajectory_to_predict, axis=0), axis=0))
                 self.generator_dataset["instructions"].append(mission)
                 self.generator_dataset["lengths"].append(mission.size(0))
                 self.generator_dataset["correct_obj_name"].append(correct_obj_name)
-                # if len(self.generator_dataset["states"]) % 10 == 0:
-                #     pkl.dump(self.generator_dataset, open("saved_tools/generator_dataset7.pkl", "wb"))
 
             self._store_episode(self.current_episode)
             self.current_episode = []
@@ -184,9 +188,9 @@ class LearntHindsightExperienceReplay(ReplayBufferParallel):
         states = self.generator_dataset['states']
 
         states, instructions, lengths = zip(*sorted(zip(states, instructions, lengths),
-                                            key=lambda x: -x[0].size(0)))
+                                            key=lambda x: -x[0].shape[0]))
 
-        states = torch.cat(states, dim=0)
+        states = torch.FloatTensor(np.concatenate(states, axis=0))
 
         self.mean_norm = states.mean(dim=(0, 1))
         self.std_norm = states.std(dim=(0, 1))

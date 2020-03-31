@@ -2,6 +2,7 @@
   "name" : "no_optimize",
 
   "algo_params": {
+    "experience_replay_config": {"prioritize" : true},
     "optimize" : false
   }
 

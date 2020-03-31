@@ -5,23 +5,6 @@ from torch.utils.data import Dataset, DataLoader, Sampler
 
 from algo.compression import BloscArrayCompressor
 
-def sample(memory, n_memory_cell, transition_proba, batch_size, compressor):
-
-    batch_seq = []
-    batch_size = batch_size // 10
-
-    id_taken = list()
-
-    for i in range(batch_size):
-        id_episode = np.random.choice(range(n_memory_cell), p=transition_proba)
-        seq = [compressor.decompress_transition(transition) for transition in memory[id_episode]]
-        batch_seq.append(seq)
-        id_taken.append(id_episode)
-
-    last_id_sampled = np.array(id_taken)
-
-    return batch_seq, last_id_sampled
-
 class MissionPadder(object):
     def __init__(self, max_length, padding_token):
         self.max_length = max_length
@@ -70,15 +53,13 @@ class WeightedSampler(Sampler):
         self.prioritize_p[id_retrieved] = errors
 
     def compute_is_weights(self, id_retrieved):
-        min_proba = np.min(self.prioritize_proba[:len(self)])
+        prioritize_proba = self.prioritize_p[:self.n_memory_cell] / self.prioritize_p[:self.n_memory_cell].sum()
+        min_proba = np.min(prioritize_proba)
         max_w = (len(self) * min_proba) ** - self.prioritize_beta
-        is_weights = np.power(self.prioritize_proba[id_retrieved] * len(self), - self.prioritize_beta)
+        is_weights = np.power(prioritize_proba[id_retrieved] * len(self), - self.prioritize_beta)
         is_weights /= max_w
 
         return is_weights
-
-    def compute_prioritize_proba(self):
-        self.prioritize_proba = self.prioritize_p[:self.n_memory_cell] / self.prioritize_p[:self.n_memory_cell].sum()
 
     def __len__(self):
         return self.n_memory_cell # Number of cell used the replay buffer
@@ -87,9 +68,10 @@ class WeightedSampler(Sampler):
         n_max_sampling = self.n_memory_cell
         if self.use_prioritization:
             while True:
+                prioritize_proba = self.prioritize_p[:n_max_sampling] / self.prioritize_p[:n_max_sampling].sum()
                 yield np.random.choice(self.id_range[:n_max_sampling],
                                        size=self.batch_size,
-                                       p=self.prioritize_proba[n_max_sampling])
+                                       p=prioritize_proba[:n_max_sampling])
         else:
             while True:
                 yield np.random.choice(self.id_range[:n_max_sampling],
@@ -153,6 +135,9 @@ class MemoryDatasetRecurrent(MemoryDataset):
         # Override to save some space
         self.memory = [None for _ in range(memory_allocated)]
         self.episode_length = np.zeros(memory_allocated)
+        self.episode_identificator = np.zeros(memory_allocated)
+
+        self.id_current_episode = 0
 
         self.max_length_seq = max_length_seq
         self.len_sum = 0
@@ -184,6 +169,8 @@ class MemoryDatasetRecurrent(MemoryDataset):
         # Store episode and length
         self.memory[self.position] = episode_to_store
         self.episode_length[self.position] = len_episode
+        self.episode_identificator[self.position] = self.id_current_episode
+        self.id_current_episode += 1
 
         # Push selector and update buffer length if necessary
         self.position += 1
@@ -207,12 +194,14 @@ class MemoryDatasetRecurrent(MemoryDataset):
             "action": [],
             "reward": [],
             "gamma": [],
-            "id_retrieved" : [id_episode]
+            "id_retrieved" : [id_episode],
+            "id_verification" : [self.episode_identificator[id_episode]]
         }
 
         sequence = self.memory[id_episode]
         #print(id_episode, self.n_memory_cell)
         len_sequence = len(sequence)
+        assert self.episode_length[id_episode] == len_sequence
 
         for transition in sequence:
 

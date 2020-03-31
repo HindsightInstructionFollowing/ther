@@ -3,6 +3,8 @@ import numpy as np
 import json
 from os import path
 
+import matplotlib.pyplot as plt
+
 class SweetLogger(SummaryWriter):
     def __init__(self, dump_step, path_to_log=None):
         """
@@ -41,7 +43,7 @@ class SweetLogger(SummaryWriter):
         # Each contains a list of values, and operation(s?) you want to apply
         self.variable_to_log = dict()
         self.sentence_to_log = dict()
-        self.buffer_id_to_log = dict()
+        self.buffer_id_log = dict()
 
         self.dump_step = dump_step
         self.str2op = {'mean': np.mean, 'max': np.max, 'min': np.min}
@@ -71,7 +73,7 @@ class SweetLogger(SummaryWriter):
             # Dump buffer id
             id_file_name = "id_count_step{}.json".format('train' if train else 'test')
             id_log_path = path.join(self.path_to_log, id_file_name)
-            json.dump(self.buffer_id_to_log, fp=open(id_log_path, 'w'), indent='    ', separators=('', ':'))
+            json.dump(self.buffer_id_log, fp=open(id_log_path, 'w'), indent='    ', separators=('', ':'))
 
             # Dump variables
             for variable_name, var_dict in self.variable_to_log.items():
@@ -98,13 +100,23 @@ class SweetLogger(SummaryWriter):
     def add_image(self, tag, img_tensor, global_step=None, walltime=None, dataformats='CHW'):
         super().add_image(tag, img_tensor, global_step, walltime, dataformats)
 
+    # def dump_buffer_id_hist(self):
+    #
+    #     buffer_id_log_array = np.zeros(int(max(self.buffer_id_log)))
+    #     for key in self.buffer_id_log:
+    #         key
+    #
+    #     bins = []
+    #     for i in range(len(a) // 100):
+    #         bins.append(a[i * 100:(i + 1) * 100].sum())
+
     def store_buffer_id(self, ids):
         for id in ids:
             id = str(id)
-            if id in self.buffer_id_to_log:
-                self.buffer_id_to_log[id] += 1
+            if id in self.buffer_id_log:
+                self.buffer_id_log[id] += 1
             else:
-                self.buffer_id_to_log[id] = 1
+                self.buffer_id_log[id] = 1
 
     def store_sentences(self, sentence, reward):
 

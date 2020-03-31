@@ -1,0 +1,6 @@
+{
+  "name" : "lr1e-4",
+  "algo_params": {
+    "lr" : 1e-4
+  }
+}

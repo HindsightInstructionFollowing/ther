@@ -57,7 +57,7 @@ def conv_factory(input_shape, channels, kernels, strides, max_pool, batch_norm):
                             )
 
         if batch_norm[layer]:
-            conv_net.add_module('batch_norm'.format(layer),
+            conv_net.add_module('batch_norm{}'.format(layer),
                                 module=nn.BatchNorm2d(channels[layer]))
 
         conv_net.add_module(name='relu{}'.format(layer),
@@ -154,11 +154,6 @@ class MinigridRecurrentPolicy(nn.Module):
 
         # Adding memory to the agent
         self.memory_rnn = nn.LSTM(input_size=self.size_after_text_viz_merge, hidden_size=self.memory_size, batch_first=True)
-        self.use_layer_norm = config["use_layer_norm"]
-        if self.use_layer_norm:
-            # layer norm creation : 2 norms because lstm splits hidden into hx and cx
-            self.layer_norm_hx = nn.LayerNorm(normalized_shape=[self.memory_size])
-            self.layer_norm_cx = nn.LayerNorm(normalized_shape=[self.memory_size])
 
         self.critic = nn.Sequential(
             nn.Linear(self.memory_size, self.last_hidden_fc_size),
@@ -237,12 +232,6 @@ class MinigridRecurrentPolicy(nn.Module):
                                                                                   enforce_sorted=False)
 
         hidden_memory = (ht[:, :, :self.memory_size], ht[:, :, self.memory_size:])
-
-        if self.use_layer_norm:
-            hidden_memory = (
-                self.layer_norm_hx(hidden_memory[0]),
-                self.layer_norm_cx(hidden_memory[1])
-            )
 
         all_ht, hidden_memory = self.memory_rnn(vision_and_text_sequence_format, hidden_memory)
         all_ht, size = torch.nn.utils.rnn.pad_packed_sequence(all_ht, batch_first=True)
@@ -442,6 +431,8 @@ class InstructionGenerator(nn.Module):
         # This is a convention, veryfied by the environment tokenizer, might be ugly
         self.BEGIN_TOKEN = 0
         self.END_TOKEN = 1
+        self.PAD_TOKEN = 2
+
 
         self.vocabulary_size = n_output
         self.generator_max_len = config["generator_max_len"]
@@ -556,6 +547,11 @@ class InstructionGenerator(nn.Module):
 
         return logits
 
+    def pad(self, tokens):
+        len_seq = len(tokens)
+        tokens += [self.PAD_TOKEN] * (self.generator_max_len - len_seq)
+        return tokens, len_seq
+
     def _generate(self, states_seq):
 
         states_seq = states_seq[-self.n_state_to_predict_instruction:]
@@ -590,7 +586,9 @@ class InstructionGenerator(nn.Module):
 
                 next_token = next_token.unsqueeze(0)
 
-        return torch.LongTensor(generated_token)
+
+        padded_mission, length_mission = self.pad(generated_token)
+        return torch.LongTensor(padded_mission), length_mission
 
 
 

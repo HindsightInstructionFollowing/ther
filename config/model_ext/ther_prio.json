@@ -8,7 +8,7 @@
         "prioritize" : true,
         "ther_params": {
           "update_steps": 150,
-          "n_sample_before_using_generator": 302
+          "n_sample_before_using_generator": 301
         }
       }
     }

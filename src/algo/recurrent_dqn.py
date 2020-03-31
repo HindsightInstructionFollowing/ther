@@ -3,10 +3,9 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from algo.transition import basic_transition
-
 import random
-import copy
+from os import path
+import numpy as np
 
 class RecurrentDQN(BaseDoubleDQN):
     def __init__(self, env, config, logger=None, visualizer=None, test_env=None, device='cpu'):
@@ -73,7 +72,7 @@ class RecurrentDQN(BaseDoubleDQN):
         batch_last_action =     batch_dict["last_action"].to(device=self.device)
         batch_gamma =           batch_dict["gamma"].type(torch.FloatTensor).view(-1)[batch_mask == 1].view(-1, 1).to(device=self.device)
 
-        is_weights =            torch.FloatTensor(is_weights).to(self.device)
+        is_weights =            torch.FloatTensor([is_weights]).to(self.device)
 
         #============= Computing targets ===========
         #===========================================
@@ -122,29 +121,31 @@ class RecurrentDQN(BaseDoubleDQN):
 
         # Update prio
         delta = torch.abs(predictions - targets).detach().cpu().numpy()
-        self.replay_buffer.update_transitions_proba(delta, batch_dict["id_retrieved"][0])
+        self.replay_buffer.update_transitions_proba(errors=delta,
+                                                    id_retrieved=batch_dict["id_retrieved"][0],
+                                                    verification_id=batch_dict["id_verification"][0])
 
         # Loss
         loss = F.smooth_l1_loss(predictions, targets, reduction='none') * is_weights
         loss = loss.mean()
-        # Optimization
-        self.optimizer.zero_grad()
-        loss.backward()
 
-        # Keep the gradient between (-1,1). Works like one uses L1 loss for large gradients (see Huber loss)
-        for name, param in self.policy_net.named_parameters():
-            if hasattr(param.grad, 'data'):
-                param.grad.data.clamp_(-1, 1)
-
-        # self.old_parameters = dict()
-        # for k, v in self.target_net.state_dict().items():
-        #     self.old_parameters[k] = v.cpu()
-
-        # Do the gradient descent step
-        self.optimizer.step()
+        if self.optimize:
+            # Optimization
+            self.optimizer.zero_grad()
+            loss.backward()
+            grad_norm = nn.utils.clip_grad_norm_(self.policy_net.parameters(), self.grad_norm_limit)
+            # Do the gradient descent step
+            self.optimizer.step()
 
         if self.environment_step % self.update_target_every == 0:
             self.target_net.load_state_dict(self.policy_net.state_dict())
+            path_weight = path.join(self.writer.path_to_log, "weights.th")
+            torch.save(self.policy_net.state_dict(), path_weight)
+
+            if hasattr(self.replay_buffer.batch_sampler, 'prioritize_p'):
+                prioritize_path = path.join(self.writer.path_to_log, "prioritize_p.npy")
+                np.save(prioritize_path, self.replay_buffer.batch_sampler.prioritize_p)
+
             self.n_update_target += 1
 
         # self.new_parameters = dict()
@@ -155,8 +156,9 @@ class RecurrentDQN(BaseDoubleDQN):
         # Log important info, see logging_helper => SweetLogger for more details
         if self.writer:
             self.writer.store_buffer_id(batch_dict["id_retrieved"][0])
-            self.writer.log("train/percent_terminal", batch_terminal.sum().item() / self.batch_size)
             self.writer.log("train/n_update_target", self.n_update_target)
+            if self.optimize:
+                self.writer.log("train/grad_norm", grad_norm, ['max', 'mean'])
 
         return loss.detach().item()
 

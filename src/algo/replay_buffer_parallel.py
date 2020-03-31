@@ -13,7 +13,6 @@ from algo.transition import basic_transition
 from algo.replay_buffer_tools import WeightedSampler, MemoryDatasetRecurrent, MemoryDataset
 
 
-
 from torch._six import container_abcs, string_classes, int_classes
 numpy_type_map = {
     'float64': torch.DoubleTensor,
@@ -138,16 +137,22 @@ class ReplayBufferParallel(DataLoader):
                          num_workers=config["num_workers"],
                          batch_sampler=weighted_sampler,
                          collate_fn=default_collate,
+                         #worker_init_fn=custom_test,
                          pin_memory=True)
 
         self.iter = None
+        self.num_iter_call = 0
+        self.reset_every = 200
 
     def sample(self):
-        if self.iter is None:
+
+        if self.iter is None or self.num_iter_call % self.reset_every == 0:
             self.iter = self.__iter__()
-        self.batch_sampler.compute_prioritize_proba()
+            self.num_iter_call = 0
+
         batch = next(self.iter)
-        return batch, self.compute_is_weights(batch["id_retrieved"][0])
+        self.num_iter_call += 1
+        return batch, self.compute_is_weights(batch["id_retrieved"][0], batch["id_verification"][0], batch["state_sequence_lengths"])
 
     def _store_episode(self, episode_to_store):
         old_position, new_position, new_n_memory_cell = self.dataset.store_episode(episode_to_store)
@@ -157,7 +162,7 @@ class ReplayBufferParallel(DataLoader):
 
         assert self.batch_sampler.n_memory_cell == self.dataset.n_memory_cell
 
-    def update_transitions_proba(self, errors, id_retrieved):
+    def update_transitions_proba(self, errors, id_retrieved, verification_id):
         """
         Two Cases needed here because the way the error are computed between recurrent and normal replay buffer
 
@@ -177,27 +182,51 @@ class ReplayBufferParallel(DataLoader):
                 processed_errors = []
                 last_l = 0
                 errors = np.power(errors, self.prioritize_alpha)
-                for l in self.dataset.episode_length[id_retrieved]:
-                    l = int(l)
-                    err_list = errors[last_l:last_l + l]
+                id_to_remove = []
+                for num_l, length in enumerate(self.dataset.episode_length[id_retrieved]):
+                    if self.dataset.episode_identificator[id_retrieved][num_l] != verification_id[num_l]: # Out-dated batch sample not in replay anymore
+                        #print("outdated_batch", id_retrieved[num_l])
+                        id_to_remove.append(num_l)
+                        continue
+
+                    length = int(length)
+                    err_list = errors[last_l:last_l + length]
                     err = self.prioritize_max_mean_balance * np.max(err_list) + (
                                 1 - self.prioritize_max_mean_balance) * np.mean(err_list)
                     processed_errors.append(err)
-                    last_l += l
+                    last_l += length
+
+                id_list = id_retrieved.tolist()
+                for rm_id in reversed(id_to_remove):
+                    id_list.pop(rm_id)
+
+                id_retrieved = id_list
+                if len(id_retrieved) == 1:
+                    processed_errors = processed_errors[0]
+                elif len(id_list) == 0:
+                    return
             else:
                 delta = errors + self.prioritize_eps
                 processed_errors = np.power(delta, self.prioritize_alpha)
 
             self.batch_sampler.update_transitions_proba(processed_errors, id_retrieved)
 
-    def compute_is_weights(self, id_retrieved):
+    def compute_is_weights(self, id_retrieved, verification_id, batch_length):
         if self.use_prioritization:
             is_weights = self.batch_sampler.compute_is_weights(id_retrieved)
             if self.is_recurrent:
                 expand_is_weight_list = []
-                for num_weight, length in enumerate(self.dataset.episode_length[id_retrieved]):
+                for num_weight, length in enumerate(batch_length):
+                    if self.dataset.episode_identificator[id_retrieved[num_weight]] != verification_id[num_weight]:
+                        print("Outdated IS : id batch {}, id memory  {}".format(
+                            verification_id[num_weight],
+                            self.dataset.episode_identificator[id_retrieved][num_weight]))
+                        current_is_weight = min(is_weights)
+                    else:
+                        current_is_weight = is_weights[num_weight]
+
                     temp_w = np.empty(int(length))
-                    temp_w[:] = is_weights[num_weight]
+                    temp_w[:] = current_is_weight
                     expand_is_weight_list.append(temp_w)
 
                 is_weights = np.concatenate(expand_is_weight_list)

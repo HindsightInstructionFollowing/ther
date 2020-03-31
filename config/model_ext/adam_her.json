@@ -1,0 +1,12 @@
+{
+  "name" : "her_adam",
+
+  "algo_params": {
+    "experience_replay_config" : {
+      "use_her" : true,
+      "hindsight_reward" : 1
+    },
+    "optimizer" : "adam"
+  }
+}
+
