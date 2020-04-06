@@ -1,5 +1,5 @@
 {
-  "name" : "doom_rdddqn_buffer4e5_b24_adam_smaller_clip40_state_norm_prio_her",
+  "name" : "doom_rdddqn_buffer4e5_b10_adam_smaller_prio_her_0work",
   "algo" : "rdqn",
   "device" : "cuda",
 
@@ -32,8 +32,8 @@
     },
 
     "experience_replay_config" : {
-      "num_workers" : 3,
-      "batch_size": 10,
+      "num_workers" : 0,
+      "batch_size": 8,
 
       "hindsight_reward" : 1,
       "size" : 400000,
@@ -86,8 +86,9 @@
     "grad_norm_limit" : 40,
     "n_step" : 1,
     "gamma" : 0.99,
+    "wait_steps_before_optim" : 5000,
     "update_target_every" : 20000,
-    "step_exploration" : 70000,
+    "step_exploration" : 100000,
     "weight_decay" : 0
   },
 

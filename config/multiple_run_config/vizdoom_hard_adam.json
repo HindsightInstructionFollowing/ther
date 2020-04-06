@@ -1,13 +1,8 @@
 [
   {
     "model_config": "conv_vizdoom_adam.json",
-    "env_config": "vizdoom_hard_scaled.json"
-  },
-  {
-    "model_config": "conv_vizdoom_adam.json",
     "env_config": "vizdoom_hard_scaled.json",
     "model_ext" : "lr2.json"
-
   },
   {
     "model_config": "conv_vizdoom_adam.json",

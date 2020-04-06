@@ -218,9 +218,7 @@ class ReplayBufferParallel(DataLoader):
                 expand_is_weight_list = []
                 for num_weight, length in enumerate(batch_length):
                     if self.dataset.episode_identificator[id_retrieved[num_weight]] != verification_id[num_weight]:
-                        print("Outdated IS : id batch {}, id memory  {}".format(
-                            verification_id[num_weight],
-                            self.dataset.episode_identificator[id_retrieved][num_weight]))
+                        #Episode not present in buffer anymore, so is_weight computation will be wrong
                         current_is_weight = min(is_weights)
                     else:
                         current_is_weight = is_weights[num_weight]

@@ -1,7 +1,8 @@
 {
-  "name" : "lr5e-4",
+  "name" : "lr1e-4_up10000",
   "algo_params": {
-    "lr" : 5e-4
+    "lr" : 1e-4,
+    "update_target_every" : 10000
   }
 }
 

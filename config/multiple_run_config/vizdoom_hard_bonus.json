@@ -5,8 +5,12 @@
     "model_ext" : "her_prio.json"
   },
   {
-    "model_config": "conv_vizdoom_recurrent.json",
+    "model_config": "conv_vizdoom_adam.json",
     "env_config": "vizdoom_hard_scaled.json"
+  },
+  {
+    "model_config": "conv_vizdoom_recurrent.json",
+    "env_config": "vizdoom_hard_scaled.json",
+    "model_ext" : "prio.json"
   }
-
 ]

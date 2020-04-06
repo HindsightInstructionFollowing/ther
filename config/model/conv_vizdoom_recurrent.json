@@ -1,5 +1,5 @@
 {
-  "name" : "doom_rdddqn_buffer4e5_b10_smaller_clip40_state_norm_rmsprop",
+  "name" : "doom_rdddqn_buffer4e5_b10_bn_smaller_rmsprop_wait4e4_0work",
   "algo" : "rdqn",
   "device" : "cuda",
 
@@ -12,7 +12,7 @@
       "conv_layers_size" : [8,4,4],
       "conv_layers_stride" : [4,2,2],
       "max_pool_layers" : [0,0,0],
-      "batch_norm_layers" : [0, 0, 0],
+      "batch_norm_layers" : [1, 0, 0],
       "projection_after_conv" : 256,
 
       "use_gated_attention" : true,
@@ -32,8 +32,8 @@
     },
 
     "experience_replay_config" : {
-      "num_workers" : 4,
-      "batch_size": 10,
+      "num_workers" : 0,
+      "batch_size": 8,
 
       "hindsight_reward" : 1,
       "size" : 400000,
@@ -86,13 +86,13 @@
     "grad_norm_limit" : 40,
     "n_step" : 1,
     "gamma" : 0.99,
+    "wait_steps_before_optim" : 5000,
     "update_target_every" : 20000,
-    "step_exploration" : 70000,
+    "step_exploration" : 100000,
     "weight_decay" : 0
   },
 
   "wrappers_model" : [
-    {"name" : "StateNormWrapper", "params" : {}},
     {"name" : "MinigridTorchWrapper", "params" : {"device" : "cuda"}}
   ]
 
