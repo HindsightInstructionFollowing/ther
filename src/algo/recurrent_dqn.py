@@ -118,7 +118,7 @@ class RecurrentDQN(BaseDoubleDQN):
                                           hindsight_mission=hindsight_mission,
                                           correct_obj_name=object_name)
 
-        if len(self.replay_buffer) < self.batch_size:
+        if self.total_steps < self.wait_steps_before_optim:
             return 0
 
         # Sample from the memory replay

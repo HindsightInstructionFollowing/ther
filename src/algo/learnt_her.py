@@ -164,7 +164,7 @@ class LearntHindsightExperienceReplay(AbstractReplay):
                 self.generator_dataset["lengths"].append(mission.size(0))
                 self.generator_dataset["correct_obj_name"].append(correct_obj_name)
                 # if len(self.generator_dataset["states"]) % 10 == 0:
-                #     pkl.dump(self.generator_dataset, open("saved_tools/generator_dataset7.pkl", "wb"))
+                #     pkl.dump(self.generator_dataset, open("saved_tools/sequential_dataset.pkl", "wb"))
 
             self._store_episode(self.current_episode)
             self.current_episode = []

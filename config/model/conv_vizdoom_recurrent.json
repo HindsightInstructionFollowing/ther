@@ -38,7 +38,7 @@
       "use_ther" : false,
       "use_compression" : true,
 
-      "prioritize" : false,
+      "prioritize" : true,
       "prioritize_alpha" : 0.9,
       "prioritize_beta" : 0.6,
       "prioritize_eps" : 1e-6,
@@ -84,7 +84,8 @@
     "n_step" : 1,
     "gamma" : 0.99,
     "update_target_every" : 20000,
-    "step_exploration" : 70000,
+    "wait_steps_before_optim" : 1000,
+    "step_exploration" : 100000,
     "weight_decay" : 0
   },
 

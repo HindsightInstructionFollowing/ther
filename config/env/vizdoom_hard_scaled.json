@@ -1,5 +1,5 @@
 {
-  "name" : "vizdoom_hard_downscale84",
+  "name" : "vizdoom_hard_downscale84_7objects_no_neg_rew",
   "gym_name" : null,
 
   "env_type" : "vizdoom",
@@ -10,11 +10,13 @@
   "q_visualizer_ep_num_to_log" : [1, 10, 100, 1000, 5000, 10000, 15000, 20000, 25000, 30000, 60000],
 
   "env_params" : {
-    "max_episode_length" : 30,
+    "wrong_object_reward" : 0,
+    "max_episode_length" : 40,
     "living_reward" : 0,
     "difficulty" : "hard",
     "frame_width" : 84,
     "frame_height" : 84,
+    "n_object" : 7,
     "visualize" : 0,
     "sleep" : 0,
     "use_train_instructions" : 1,

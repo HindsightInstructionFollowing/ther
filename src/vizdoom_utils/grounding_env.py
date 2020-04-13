@@ -58,6 +58,8 @@ class GroundingEnv(gym.core.Env):
         else:
             self.instructions = self.test_instructions
 
+        self.n_object = self.params.n_object
+
         self.word_to_idx = self.get_word_to_idx()
         self.objects, self.object_dict = \
             self.get_all_objects(self.params.all_instr_file)
@@ -74,6 +76,7 @@ class GroundingEnv(gym.core.Env):
         self.observation_space = gym.spaces.Dict(obs_space)
         self.reward_range = (WRONG_OBJECT_REWARD, CORRECT_OBJECT_REWARD)
         self.metadata = None
+
         self.max_steps = self.params.max_episode_length
 
     def game_init(self):
@@ -101,7 +104,7 @@ class GroundingEnv(gym.core.Env):
         correct_objects = self.get_target_objects(instruction_id)
 
         # Since we fix the number of objects to 5.
-        self.correct_location = np.random.randint(5)
+        self.correct_location = np.random.randint(self.n_object)
 
         # Randomly select one correct object from the
         # list of possible correct objects for the instruction.
@@ -116,13 +119,13 @@ class GroundingEnv(gym.core.Env):
         if 'largest' not in self.mission \
                 and 'smallest' not in self.mission:
             object_ids = random.sample([x for x in range(len(self.objects))
-                                        if x not in correct_objects], 4)
+                                        if x not in correct_objects], self.n_object - 1)
         else:
             object_ids = self.get_candidate_objects_superlative_instr(
                          chosen_correct_object)
             object_ids = [self.object_dict[x] for x in object_ids]
 
-        assert len(object_ids) == 4
+        assert len(object_ids) == self.n_object - 1
 
         object_ids.insert(self.correct_location, correct_object_id)
 
@@ -193,9 +196,13 @@ class GroundingEnv(gym.core.Env):
 
         hindsight_mission = None
 
-        # ========== RETRIEVE HINDSIGHT MISSION ============
-        # ==================================================
         if reward == WRONG_OBJECT_REWARD:
+            # Override negative reward
+            if hasattr(self.params, "wrong_object_reward") :
+                reward = self.params.wrong_object_reward
+
+            # ========== RETRIEVE HINDSIGHT MISSION ============
+            # ==================================================
             for i, object_location in enumerate(self.object_coordinates):
                 if i == self.correct_location:
                     continue
@@ -296,17 +303,19 @@ class GroundingEnv(gym.core.Env):
             # and 5 for candidate objects.
             random_locations = generate_points(HARD_ENV_OBJ_DIST_THRESHOLD,
                                                MAP_SIZE_X - 2*MARGIN,
-                                               MAP_SIZE_Y - 2*MARGIN, 6)
+                                               MAP_SIZE_Y - 2*MARGIN, self.n_object + 1)
 
             agent_x_coordinate = random_locations[0][0] + X_OFFSET + MARGIN
             agent_y_coordinate = random_locations[0][1] + Y_OFFSET + MARGIN
             agent_orientation = np.random.randint(4)
 
-            for i in range(1, 6):
+            for i in range(1, self.n_object + 1):
                 object_x_coordinates.append(
                     random_locations[i][0] + X_OFFSET + MARGIN)
                 object_y_coordinates.append(
                     random_locations[i][1] + Y_OFFSET + MARGIN)
+
+
 
         return agent_x_coordinate, agent_y_coordinate, agent_orientation, \
             object_x_coordinates, object_y_coordinates
@@ -353,10 +362,10 @@ class GroundingEnv(gym.core.Env):
                         obj.absolute_size - SIZE_THRESHOLD:
                     output_objects.append(obj)
 
-        # shuffle the objects and select the top 4
+        # shuffle the objects and select the top X
         # randomizing the objects combination
         random.shuffle(output_objects)
-        return [x.name for x in output_objects[:4]]
+        return [x.name for x in output_objects[:self.n_object - 1]]
 
     def get_objects_info(self):
         objects = []

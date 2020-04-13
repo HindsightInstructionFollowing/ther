@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_recurrent_buffer4e5",
+  "name" : "minigrid_recurrent_buffer4e5_prio_wait4e4",
   "algo" : "rdqn",
   "device" : "cuda",
 
@@ -37,7 +37,7 @@
       "use_ther" : false,
       "use_compression" : true,
 
-      "prioritize" : false,
+      "prioritize" : true,
       "prioritize_alpha" : 0.9,
       "prioritize_beta" : 0.6,
       "prioritize_eps" : 1e-6,
@@ -54,13 +54,14 @@
         "update_steps": 100,
 
         "n_sample_before_using_generator" : 300,
-        "n_state_to_predict_instruction": 7,
+        "n_state_to_predict_instruction": 40,
 
         "architecture_params": {
           "conv_layers_channel" : [16,32,64],
           "conv_layers_size" : [2,2,2],
           "conv_layers_stride" : [1,1,1],
           "max_pool_layers" : [2,0,0],
+          "batch_norm_layers" : [0,0,0],
 
           "projection_after_conv": 512,
           "trajectory_encoding_rnn": 512,
@@ -79,11 +80,13 @@
     "n_parallel_env" : 1,
     "batch_size" : 128,
     "n_optimize_per_step" : 1,
+    "grad_norm_limit" : 40,
     "lr" : 1e-5,
     "n_step" : 1,
     "gamma" : 0.99,
     "update_target_every" : 20000,
-    "step_exploration" : 40000,
+    "step_exploration" : 200000,
+    "wait_steps_before_optim" : 40000,
     "weight_decay" : 0
   },
 

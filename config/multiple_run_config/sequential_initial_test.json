@@ -7,42 +7,19 @@
   {
     "model_config": "conv_fetch_recurrent.json",
     "env_config": "minigrid_sequential.json",
-    "model_ext" : "bigger_er"
+    "model_ext" : "her.json"
   },
 
   {
-    "model_config": "conv_fetch_recurrent_bigger_er.json",
+    "model_config": "conv_fetch_recurrent.json",
     "env_config": "minigrid_sequential.json",
     "model_ext" : "her_nstep3.json"
   },
 
   {
-    "model_config": "conv_fetch_recurrent_bigger_er.json",
-    "env_config": "minigrid_sequential.json",
-    "model_ext" : "her_nstep5.json"
-  },
-
-  {
-    "model_config": "conv_fetch_recurrent_bigger_er.json",
-    "env_config": "minigrid_sequential.json",
-    "model_ext" : "nstep3.json"
-  },
-
-  {
-    "model_config": "conv_fetch_recurrent_bigger_er.json",
-    "env_config": "minigrid_sequential.json",
-    "model_ext" : "nstep5.json"
-  },
-
-  {
     "model_config": "conv_fetch_recurrent.json",
     "env_config": "minigrid_sequential.json",
-    "model_ext" : "buffer1e6.json"
-  },
-
-  {
-    "model_config": "conv_fetch_recurrent.json",
-    "env_config": "minigrid_sequential.json",
-    "model_ext" : "buffer1e6_her.json"
+    "model_ext" : "n_step3.json"
   }
+
 ]

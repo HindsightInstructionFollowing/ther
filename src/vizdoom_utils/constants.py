@@ -9,11 +9,11 @@ CORRECT_OBJECT_REWARD = 1.0
 WRONG_OBJECT_REWARD = -0.2
 
 # Size of the map
-MAP_SIZE_X = 384
-MAP_SIZE_Y = 384
+MAP_SIZE_X = 768
+MAP_SIZE_Y = 544
 
 # Map offsets in doom coordinates
-Y_OFFSET = 320
+Y_OFFSET = 224
 X_OFFSET = 0
 
 # Margin to avoid objects overlapping with the walls

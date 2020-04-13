@@ -36,6 +36,7 @@ class BaseDoubleDQN(nn.Module):
                                              lr=config["lr"],
                                              weight_decay=config["weight_decay"])
 
+        self.wait_steps_before_optim = config["wait_steps_before_optim"]
         self.n_optimize_per_step = config["n_optimize_per_step"]
         self.n_update_policy_net = 0
 

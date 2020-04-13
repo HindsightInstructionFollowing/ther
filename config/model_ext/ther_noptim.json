@@ -1,0 +1,18 @@
+{
+  "name": "ther_no_optim",
+  "algo_params": {
+    "experience_replay_config": {
+        "hindsight_reward": 1,
+        "use_ther": true,
+      "ther_params" : {
+        "update_steps": 10000000000,
+        "n_sample_before_using_generator" : 10000000000,
+        "n_state_to_predict_instruction": 40
+      }
+
+    },
+
+    "batch_size" : 10000000000,
+    "step_exploration" : 1e10
+  }
+}

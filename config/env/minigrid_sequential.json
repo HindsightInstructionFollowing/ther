@@ -11,7 +11,7 @@
   "env_params" : {
     "max_steps" : 40,
     "missions_file_str" : "gym-minigrid/gym_minigrid/envs/missions/fetch_train_missions_80_percent.json",
-    "size" : 10,
+    "size" : 7,
     "numObjs" : 5,
     "single_mission" : false,
     "n_objective" : 2,
@@ -19,7 +19,7 @@
   },
 
   "env_test" : {
-    "n_step_between_test" : 500,
+    "n_step_between_test" : 30000,
     "n_step_test" : 10000,
     "missions_file_str" : "gym-minigrid/gym_minigrid/envs/missions/fetch_holdout_20_percent.json"
   },
