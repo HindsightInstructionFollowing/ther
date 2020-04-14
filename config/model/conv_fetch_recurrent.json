@@ -1,5 +1,5 @@
 {
-  "name" : "minigrid_recurrent_buffer4e5_prio_wait4e4",
+  "name" : "minigrid_recurrent_buffer4e5_prio_longer_target_wait",
   "algo" : "rdqn",
   "device" : "cuda",
 
@@ -19,14 +19,14 @@
 
       "ignore_text" : false,
 
-      "rnn_state_hidden_size" : 512,
+      "rnn_state_hidden_size" : 256,
       "use_action_rnn" : true,
       "action_embedding_size" : 16,
 
       "word_embedding_size" : 32,
 
-      "rnn_text_hidden_size" : 512,
-      "fc_text_embedding_hidden" : 256,
+      "rnn_text_hidden_size" : 128,
+      "fc_text_embedding_hidden" : 128,
       "last_hidden_fc_size" : 256
     },
 
@@ -84,9 +84,9 @@
     "lr" : 1e-5,
     "n_step" : 1,
     "gamma" : 0.99,
-    "update_target_every" : 20000,
-    "step_exploration" : 200000,
-    "wait_steps_before_optim" : 40000,
+    "update_target_every" : 40000,
+    "step_exploration" : 300000,
+    "wait_steps_before_optim" : 120000,
     "weight_decay" : 0
   },
 

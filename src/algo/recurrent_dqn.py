@@ -122,7 +122,8 @@ class RecurrentDQN(BaseDoubleDQN):
             return 0
 
         # Sample from the memory replay
-        transitions, is_weights = self.replay_buffer.sample(self.batch_size)
+        self.sample = self.replay_buffer.sample(self.batch_size)
+        transitions, is_weights = self.sample
 
         batch_dict = self.preprocess_state_sequences(transitions)
 

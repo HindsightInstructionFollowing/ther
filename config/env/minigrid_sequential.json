@@ -1,5 +1,5 @@
 {
-  "name" : "sequential_s10_obj5_no_order",
+  "name" : "sequential_s7_obj4_no_order",
   "gym_name" : null,
   "env_type" : "sequential",
 
@@ -12,7 +12,7 @@
     "max_steps" : 40,
     "missions_file_str" : "gym-minigrid/gym_minigrid/envs/missions/fetch_train_missions_80_percent.json",
     "size" : 7,
-    "numObjs" : 5,
+    "numObjs" : 4,
     "single_mission" : false,
     "n_objective" : 2,
     "ordered_pickup" : false

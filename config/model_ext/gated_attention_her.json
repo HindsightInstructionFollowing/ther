@@ -1,10 +1,10 @@
 {
-  "name" : "no_gated_attention_and_her",
+  "name" : "gated_attention_and_her",
 
   "algo_params": {
 
     "architecture_params" : {
-      "use_gated_attention" : false
+      "use_gated_attention" : true
     },
 
     "experience_replay_config" : {

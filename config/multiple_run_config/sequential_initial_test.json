@@ -19,7 +19,6 @@
   {
     "model_config": "conv_fetch_recurrent.json",
     "env_config": "minigrid_sequential.json",
-    "model_ext" : "n_step3.json"
+    "model_ext" : "gated_attention_her.json"
   }
-
 ]

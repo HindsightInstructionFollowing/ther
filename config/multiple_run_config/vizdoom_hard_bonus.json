@@ -7,7 +7,6 @@
 
   {
     "model_config": "conv_vizdoom_recurrent.json",
-    "env_config": "vizdoom_hard_scaled.json",
-    "model_ext" : "ther_prio2.json"
+    "env_config": "vizdoom_hard_scaled.json"
   }
 ]
