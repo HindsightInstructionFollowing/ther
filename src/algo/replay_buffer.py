@@ -40,8 +40,8 @@ class AbstractReplay(ABC):
             self.prioritize_eps   = config["prioritize_eps"]
             self.prioritize_p =     np.zeros(self.memory_size)
             self.id_range =         np.arange(self.memory_size)
-            self.max_proba = 3
-            self.prioritize_p[0] = 3
+            self.max_proba = 1
+            self.prioritize_p[0] = 1
 
         # N-step, gamma
         self.last_terminal = []  # Logging done or terminal (end of episode)
@@ -64,7 +64,6 @@ class AbstractReplay(ABC):
 
         if self.use_prioritization:
             prioritize_proba = self.prioritize_p[:self.n_memory_cell] / self.prioritize_p[:self.n_memory_cell].sum()
-
             self.last_id_sampled = np.random.choice(self.id_range[:self.n_memory_cell],
                                                     size=batch_size,
                                                     replace=True,

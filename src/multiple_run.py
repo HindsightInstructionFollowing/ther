@@ -42,7 +42,7 @@ if __name__ == "__main__":
 
     print("Number of expe to launch : {}".format(len(configs)))
 
-    shuffle(configs)
+    #shuffle(configs)
 
     if args.out_dir:
         for config in configs:

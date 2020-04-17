@@ -1,5 +1,5 @@
 {
-  "name" : "doom_rdddqn_buffer4e5_smaller_archi_bn_clip40",
+  "name" : "doom_rdddqn_buffer4e5_smaller_archi_bn_prio",
   "algo" : "rdqn",
   "device" : "cuda",
 
@@ -55,7 +55,7 @@
           "update_steps": 150,
           "n_sample_before_using_generator": 300,
 
-          "n_state_to_predict_instruction": 7,
+          "n_state_to_predict_instruction": 20,
 
           "architecture_params": {
             "conv_layers_channel" : [32, 64, 64],

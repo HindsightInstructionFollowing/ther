@@ -1,5 +1,5 @@
 {
-  "name": "buffer1e6_ther_acc96_steps150_max2000",
+  "name": "ther",
   "algo_params": {
     "architecture": "conv_lstm",
     "experience_replay_config": {

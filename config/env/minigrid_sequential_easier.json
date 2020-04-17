@@ -1,0 +1,34 @@
+{
+  "name" : "sequential_s7_obj4_2attr_no_order_easier",
+  "gym_name" : null,
+  "env_type" : "sequential",
+
+  "n_env_iter" : 2e6,
+
+  "q_visualizer_proba_log" : 0,
+  "q_visualizer_ep_num_to_log" : [1, 100, 1000, 4000, 10000, 30000, 60000],
+
+  "env_params" : {
+    "max_steps" : 40,
+    "missions_file_str" : "gym-minigrid/gym_minigrid/envs/missions/fetch_2_attr_70.json",
+    "size" : 7,
+    "numObjs" : 4,
+    "single_mission" : false,
+    "n_objective" : 2,
+    "ordered_pickup" : false
+  },
+
+  "env_test" : {
+    "n_step_between_test" : 30000,
+    "n_step_test" : 10000,
+    "missions_file_str" : "gym-minigrid/gym_minigrid/envs/missions/fetch_2_attr_30.json"
+  },
+
+  "wrappers_env" : [
+      {"name" : "RemoveUselessChannelWrapper", "params" : {}},
+      {"name" : "RemoveUselessActionWrapper", "params" : {}},
+      {"name" : "Word2IndexWrapper", "params" : {"vocab_file_str" : "gym-minigrid/gym_minigrid/envs/missions/vocab_sequential.json"}},
+      {"name" : "lastactionwrapper", "params" : {}}
+  ]
+}
+

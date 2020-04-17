@@ -78,7 +78,7 @@
     },
 
     "n_parallel_env" : 1,
-    "batch_size" : 128,
+    "batch_size" : 256,
     "n_optimize_per_step" : 1,
     "grad_norm_limit" : 40,
     "lr" : 1e-5,
@@ -86,7 +86,7 @@
     "gamma" : 0.99,
     "update_target_every" : 40000,
     "step_exploration" : 300000,
-    "wait_steps_before_optim" : 120000,
+    "wait_steps_before_optim" : 10000,
     "weight_decay" : 0
   },
 
